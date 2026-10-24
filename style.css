@@ -96,7 +96,7 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
   grid-template-columns: 52px repeat(7, minmax(44px, 1fr));
   gap: 2px;
   user-select: none;
-  touch-action: none;
+  touch-action: manipulation; /* allow scroll and pinch-zoom on phones; taps toggle hours */
   overflow-x: auto;
 }
 .grid .head, .grid .hour { color: var(--muted); font-size: 12px; display: flex; align-items: center; justify-content: center; }

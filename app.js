@@ -379,7 +379,24 @@ function paint(cell) {
   cell.classList.toggle("mine", drag.adding);
 }
 
+// Touch: tap toggles one hour and the browser keeps scrolling and pinch-zoom.
+// The click only fires if the finger didn't scroll, so swipes never paint.
+let lastPointerType = "mouse";
+
+$("#grid").addEventListener("click", async (e) => {
+  if (lastPointerType !== "touch") return;
+  const cell = e.target.closest(".cell");
+  if (!cell) return;
+  if (!state.me) { alert("Add your character in the roster first."); return; }
+  drag.adding = !state.availability[state.me]?.has(cell.dataset.key);
+  paint(cell);
+  renderGrid();
+  await saveMyWeek();
+});
+
 $("#grid").addEventListener("pointerdown", (e) => {
+  lastPointerType = e.pointerType;
+  if (e.pointerType === "touch") return;
   const cell = e.target.closest(".cell");
   if (!cell) return;
   if (!state.me) { alert("Add your character in the roster first."); return; }
