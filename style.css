@@ -35,7 +35,10 @@ h1 { margin: 0; font-size: 20px; color: var(--accent); }
 h2 { margin: 0; font-size: 16px; }
 h3 { margin: 0 0 8px; font-size: 14px; }
 
-.who { display: flex; gap: 8px; align-items: center; }
+.who { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.who label { white-space: nowrap; }
+.who select { min-width: 0; max-width: 220px; }
+#user-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 button, select, input {
   font: inherit;
@@ -75,13 +78,16 @@ main {
   padding: 24px;
 }
 @media (max-width: 1000px) {
-  main { grid-template-columns: 1fr; padding: 16px; }
+  main { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
+  /* One column: roster first, so new people see they need to add a character. */
+  .roster { order: -1; }
 }
 
 section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
 
-.week-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.week-nav h2 { min-width: 200px; text-align: center; }
+.week-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.week-pick, .week-actions { display: flex; gap: 8px; align-items: center; }
+.week-pick h2 { min-width: 180px; text-align: center; }
 .hint { color: var(--muted); margin: 8px 0 12px; }
 
 /* Schedule grid */
@@ -137,13 +143,26 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
   .chip .pname { display: none; }
 }
 
+/* New user without a character: put the add form first and make it stand out. */
+.roster { display: flex; flex-direction: column; }
+.needs-char-msg { display: none; grid-column: 1 / -1; margin: 0; }
+.roster.needs-char .add-player {
+  order: -1;
+  margin: 0 0 16px;
+  padding: 14px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+.roster.needs-char .needs-char-msg { display: block; }
+
 .best { margin-top: 16px; }
 .best ul { margin: 6px 0 0; padding-left: 18px; }
 .best li { margin: 2px 0; }
 .muted { color: var(--muted); }
 
 /* Roster */
-.roster-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.roster-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; order: -2; }
 .cards { display: flex; flex-direction: column; gap: 10px; }
 
 .card {
@@ -170,6 +189,30 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .card .key input { width: 56px; }
 .card .remove { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 .card .legend { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+
+.card .week-line { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.card .week-line.ok { color: var(--good); }
+.card .week-line.away { color: var(--error); }
+.card .week-line.pending { color: var(--accent); }
+
+/* "Can't play" day toggles */
+.busy-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 12px; }
+.busy-row:empty { display: none; }
+.busy-row .label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.busy-row button { padding: 3px 9px; font-size: 12px; }
+.busy-row button.on { background: color-mix(in srgb, var(--error) 25%, var(--panel-2)); border-color: var(--error); color: #fff; }
+
+/* People who can't play, shown under each day name */
+.grid .head { flex-direction: column; gap: 3px; }
+.grid .away { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
+.away-badge { position: relative; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--player); overflow: hidden; }
+.away-badge img, .away-badge .noimg { width: 100%; height: 100%; display: block; filter: grayscale(.85) brightness(.8); }
+.away-badge .noimg { background: var(--player); }
+.away-badge::after {
+  content: "✕"; position: absolute; right: 0; bottom: 0; width: 9px; height: 9px;
+  display: grid; place-items: center; border-radius: 3px 0 0 0;
+  background: var(--error); color: #fff; font-weight: 900; font-size: 7px; line-height: 1;
+}
 
 .card .late-line { margin-top: 8px; display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
 .card .late-line b { color: var(--error); }
@@ -203,3 +246,36 @@ dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px;
 .add-player h3, .add-player .error { grid-column: 1 / -1; }
 .add-player input, .add-player select, .add-player button { width: 100%; min-width: 0; }
 .error { color: var(--error); margin: 0; }
+
+/* Phones */
+@media (max-width: 600px) {
+  header { padding: 12px 16px; }
+  .who { width: 100%; }
+  .who select { flex: 1; max-width: none; }
+  #user-email { display: none; }
+
+  main { padding: 12px; }
+  section { padding: 12px; }
+
+  .week-pick { width: 100%; }
+  .week-pick h2 { flex: 1; min-width: 0; font-size: 15px; }
+  .week-actions { width: 100%; }
+  .week-actions button { flex: 1; }
+
+  .grid { grid-template-columns: 36px repeat(7, minmax(0, 1fr)); overflow-x: visible; }
+  .grid .head { font-size: 11px; line-height: 1.2; }
+  .grid .head > div:first-child { display: flex; flex-direction: column; align-items: center; }
+  .away-badge { width: 16px; height: 16px; }
+  .busy-row .label { width: 100%; }
+  .busy-row button { flex: 1; padding: 4px 0; }
+  .busy-row button.whole { flex-basis: 100%; }
+  .grid .hour { font-size: 10px; padding-right: 4px; }
+  .cell { padding: 2px; }
+  /* Shorter roster cards so the schedule isn't pushed far down. */
+  .card .runs { display: none; }
+  .card .stats, .card .key, .card .late-line { margin-top: 6px; }
+  .card img { width: 36px; height: 36px; }
+
+  .chip { padding: 1px; border-left-width: 2px; gap: 1px; }
+  .chip .role { width: 11px; font-size: 9px; }
+}

@@ -32,6 +32,7 @@ const state = {
   user: null,           // firebase auth user
   players: [],          // [{id, name, realm, region, keyDungeon, keyLevel, ownerUid}]
   availability: {},     // playerId -> Set("d-h") for the shown week
+  busy: {},             // playerId -> Set(dayIndex) the player can't play in the shown week
   lates: [],            // [{id, playerId, minutes, note, at, reportedBy, reportedByName, excuse?}]
   rio: {},              // playerId -> raider.io profile | {error}
   dungeons: [],         // current season dungeons from raider.io
@@ -146,14 +147,21 @@ function onPlayers(snap) {
 function subscribeWeek() {
   state.unsubAvailability?.();
   state.availability = {};
+  state.busy = {};
   const q = query(collection(db, "availability"), where("week", "==", weekKey(state.weekStart)));
   state.unsubAvailability = onSnapshot(q, (snap) => {
     // Don't overwrite my own cells while I'm dragging.
-    const mine = drag.active ? state.availability[state.me] : null;
+    const mine = drag.active ? [state.availability[state.me], state.busy[state.me]] : null;
     state.availability = {};
-    for (const d of snap.docs) state.availability[d.data().playerId] = new Set(d.data().slots);
-    if (mine) state.availability[state.me] = mine;
+    state.busy = {};
+    for (const d of snap.docs) {
+      const data = d.data();
+      state.availability[data.playerId] = new Set(data.slots);
+      state.busy[data.playerId] = new Set(data.busyDays ?? []);
+    }
+    if (mine) [state.availability[state.me], state.busy[state.me]] = mine;
     renderGrid();
+    renderRoster();
   }, (err) => console.error("Could not load schedule:", err));
   renderWeekLabel();
 }
@@ -162,7 +170,8 @@ function saveMyWeek() {
   if (!state.me) return;
   const week = weekKey(state.weekStart);
   const slots = [...(state.availability[state.me] ?? [])];
-  return setDoc(doc(db, "availability", `${week}_${state.me}`), { week, playerId: state.me, slots });
+  const busyDays = [...(state.busy[state.me] ?? [])].sort();
+  return setDoc(doc(db, "availability", `${week}_${state.me}`), { week, playerId: state.me, slots, busyDays });
 }
 
 // ---------- raider.io ----------
@@ -218,7 +227,7 @@ function renderMeSelect() {
   const mine = myPlayers();
   $("#me").innerHTML = mine.length
     ? mine.map((p) => `<option value="${p.id}" ${p.id === state.me ? "selected" : ""}>${esc(p.name)}</option>`).join("")
-    : `<option value="">— add your character in the roster —</option>`;
+    : `<option value="">No character yet</option>`;
 }
 
 $("#me").addEventListener("change", (e) => setMe(e.target.value));
@@ -260,7 +269,11 @@ function renderGrid() {
   const todayIdx = weekKey(mondayOf(new Date())) === weekKey(state.weekStart) ? (new Date().getDay() + 6) % 7 : -1;
   let html = `<div></div>`;
   DAYS.forEach((d, i) => {
-    html += `<div class="head ${i === todayIdx ? "today" : ""}">${d} ${addDays(state.weekStart, i).getDate()}</div>`;
+    const away = state.players.filter((p) => state.busy[p.id]?.has(i));
+    const awayList = away.length
+      ? `<div class="away" title="Can't play: ${esc(away.map((p) => p.name).join(", "))}">${away.map(awayBadge).join("")}</div>`
+      : "";
+    html += `<div class="head ${i === todayIdx ? "today" : ""}"><div><span>${d}</span> <span>${addDays(state.weekStart, i).getDate()}</span></div>${awayList}</div>`;
   });
   const total = state.players.length;
   for (let h = FIRST_HOUR; h <= LAST_HOUR; h++) {
@@ -277,8 +290,47 @@ function renderGrid() {
     }
   }
   $("#grid").innerHTML = html;
+  renderBusyRow();
   renderBest();
 }
+
+function awayBadge(p) {
+  const img = state.rio[p.id]?.thumbnail_url;
+  return `<span class="away-badge" style="--player:${colorOf(p.id)}">`
+    + (img ? `<img src="${esc(img)}" alt="" draggable="false">` : `<span class="noimg"></span>`)
+    + `</span>`;
+}
+
+// "Can't play" toggles for my character, one per day plus the whole week.
+function renderBusyRow() {
+  if (!state.me) { $("#busy-row").innerHTML = ""; return; }
+  const busy = state.busy[state.me] ?? new Set();
+  $("#busy-row").innerHTML = `<span class="label">Can't play:</span>`
+    + DAYS.map((d, i) => `<button class="secondary ${busy.has(i) ? "on" : ""}" data-busy-day="${i}">${d}</button>`).join("")
+    + `<button class="secondary whole ${busy.size === 7 ? "on" : ""}" data-busy-day="all">Whole week</button>`;
+}
+
+$("#busy-row").addEventListener("click", async (e) => {
+  const day = e.target.dataset.busyDay;
+  if (day === undefined || !state.me) return;
+  const busy = (state.busy[state.me] ??= new Set());
+  const slots = (state.availability[state.me] ??= new Set());
+  const days = day === "all" ? [0, 1, 2, 3, 4, 5, 6] : [Number(day)];
+  const turnOn = day === "all" ? busy.size < 7 : !busy.has(Number(day));
+  if (turnOn && days.some((d) => [...slots].some((k) => k.startsWith(`${d}-`)))
+      && !confirm("This removes the hours you've marked on those days. Continue?")) return;
+  for (const d of days) {
+    if (turnOn) {
+      busy.add(d);
+      for (const k of [...slots]) if (k.startsWith(`${d}-`)) slots.delete(k);
+    } else {
+      busy.delete(d);
+    }
+  }
+  renderGrid();
+  renderRoster();
+  await saveMyWeek();
+});
 
 // Lists time windows where at least (all - 1) players are free, longest first.
 function renderBest() {
@@ -318,7 +370,12 @@ function paint(cell) {
   const key = cell?.dataset?.key;
   if (!key) return;
   const set = (state.availability[state.me] ??= new Set());
-  if (drag.adding) set.add(key); else set.delete(key);
+  if (drag.adding) {
+    set.add(key);
+    state.busy[state.me]?.delete(Number(key.split("-")[0])); // marking hours means I can play that day
+  } else {
+    set.delete(key);
+  }
   cell.classList.toggle("mine", drag.adding);
 }
 
@@ -351,12 +408,14 @@ $("#copy-week").addEventListener("click", async () => {
   const prev = await getDoc(doc(db, "availability", `${weekKey(addDays(state.weekStart, -7))}_${state.me}`));
   if (!prev.exists()) return alert("You have nothing saved last week.");
   state.availability[state.me] = new Set(prev.data().slots);
+  state.busy[state.me] = new Set(prev.data().busyDays ?? []);
   await saveMyWeek();
 });
 
 $("#clear-week").addEventListener("click", async () => {
-  if (!state.me || !confirm("Clear all your hours this week?")) return;
+  if (!state.me || !confirm("Clear all your hours and \"can't play\" days this week?")) return;
   state.availability[state.me] = new Set();
+  state.busy[state.me] = new Set();
   await saveMyWeek();
 });
 
@@ -388,8 +447,9 @@ function keyEditor(p) {
 }
 
 function renderRoster() {
+  $(".roster").classList.toggle("needs-char", !myPlayers().length);
   if (!state.players.length) {
-    $("#cards").innerHTML = `<p class="muted">No characters yet. Add yours below.</p>`;
+    $("#cards").innerHTML = `<p class="muted">No characters yet.</p>`;
     return;
   }
   $("#cards").innerHTML = state.players.map((p) => {
@@ -423,6 +483,7 @@ function renderRoster() {
     }
     return `<div class="card ${p.id === state.me ? "me" : ""}" style="--class-color:${color}" data-id="${p.id}">
       ${body}
+      ${weekLine(p)}
       ${keyEditor(p)}
       ${lateLine(p)}
       ${isMine(p) ? `<div class="key"><button class="secondary remove" data-remove="${p.id}">Remove</button></div>` : ""}
@@ -448,6 +509,26 @@ $("#cards").addEventListener("click", async (e) => {
 // ---------- late tracker ----------
 
 const latesFor = (playerId) => state.lates.filter((l) => l.playerId === playerId);
+
+// Has this player filled in the shown week? Tells "can't play" apart from "forgot".
+function weekLine(p) {
+  const when = weekKey(state.weekStart) === weekKey(mondayOf(new Date())) ? "this week" : "that week";
+  const hours = state.availability[p.id]?.size ?? 0;
+  const busy = [...(state.busy[p.id] ?? [])].sort().map((d) => DAYS[d]);
+  let text;
+  let cls = "";
+  if (busy.length === 7) {
+    [text, cls] = [`🚫 Not available ${when}`, "away"];
+  } else if (hours) {
+    text = `📅 ${hours} h marked ${when}` + (busy.length ? ` · can't play ${busy.join(", ")}` : "");
+    cls = "ok";
+  } else if (busy.length) {
+    [text, cls] = [`🚫 Can't play ${busy.join(", ")} · no hours marked`, "away"];
+  } else {
+    [text, cls] = [`⏳ Hasn't updated ${when} yet`, "pending"];
+  }
+  return `<div class="week-line ${cls}">${text}</div>`;
+}
 
 function lateLine(p) {
   const lates = latesFor(p.id);

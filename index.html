@@ -62,12 +62,17 @@
   <main id="app" hidden>
     <section class="schedule">
       <div class="week-nav">
-        <button id="prev-week" aria-label="Previous week">‹</button>
-        <h2 id="week-label"></h2>
-        <button id="next-week" aria-label="Next week">›</button>
-        <button id="copy-week" class="secondary">Copy my last week</button>
-        <button id="clear-week" class="secondary">Clear my week</button>
+        <div class="week-pick">
+          <button id="prev-week" aria-label="Previous week">‹</button>
+          <h2 id="week-label"></h2>
+          <button id="next-week" aria-label="Next week">›</button>
+        </div>
+        <div class="week-actions">
+          <button id="copy-week" class="secondary">Copy my last week</button>
+          <button id="clear-week" class="secondary">Clear my week</button>
+        </div>
       </div>
+      <div id="busy-row" class="busy-row"></div>
       <p class="hint">Click or drag over the hours you can play. Times are in your local time zone.</p>
       <div id="grid" class="grid"></div>
       <div id="best" class="best"></div>
@@ -83,6 +88,7 @@
 
       <form id="add-player" class="add-player">
         <h3>Add character</h3>
+        <p class="needs-char-msg">👋 Welcome! Add your WoW character first. Then you can mark your hours in the schedule.</p>
         <input name="name" placeholder="Character name" required>
         <input name="realm" placeholder="Realm (e.g. Draenor)" required>
         <select name="region">

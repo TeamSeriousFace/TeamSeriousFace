@@ -46,9 +46,10 @@ service cloud.firestore {
     match /availability/{id} {
       allow read: if isMember();
       allow create, update: if isMember()
-        && request.resource.data.keys().hasOnly(['week', 'playerId', 'slots'])
+        && request.resource.data.keys().hasOnly(['week', 'playerId', 'slots', 'busyDays'])
         && request.resource.data.week is string
         && request.resource.data.slots is list && request.resource.data.slots.size() <= 168
+        && (!('busyDays' in request.resource.data) || (request.resource.data.busyDays is list && request.resource.data.busyDays.size() <= 7))
         && id == request.resource.data.week + '_' + request.resource.data.playerId
         && ownsPlayer(request.resource.data.playerId);
       allow delete: if isMember() && ownsPlayer(resource.data.playerId);
