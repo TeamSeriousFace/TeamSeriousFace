@@ -1,0 +1,77 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The group. Only these Google accounts can see or change anything.
+    // Copy this file to firestore.rules, put in real emails (lowercase) and paste it into
+    // Firebase console → Firestore → Rules → Publish. firestore.rules is gitignored.
+    function members() {
+      return [
+        'you@gmail.com',
+        'friend1@gmail.com',
+        'friend2@gmail.com',
+        'friend3@gmail.com',
+        'friend4@gmail.com'
+      ];
+    }
+
+    function isMember() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in members();
+    }
+
+    function validPlayer(d) {
+      return d.keys().hasOnly(['name', 'realm', 'region', 'keyDungeon', 'keyLevel', 'ownerUid', 'createdAt'])
+        && d.name is string && d.name.size() <= 24
+        && d.realm is string && d.realm.size() <= 40
+        && d.region in ['eu', 'us', 'kr', 'tw']
+        && d.ownerUid == request.auth.uid;
+    }
+
+    function ownsPlayer(playerId) {
+      return get(/databases/$(database)/documents/players/$(playerId)).data.ownerUid == request.auth.uid;
+    }
+
+    // Everyone in the group sees all characters; you can only add, edit or remove your own.
+    match /players/{id} {
+      allow read: if isMember();
+      allow create: if isMember() && validPlayer(request.resource.data);
+      allow update: if isMember() && resource.data.ownerUid == request.auth.uid && validPlayer(request.resource.data);
+      allow delete: if isMember() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Everyone sees all hours; you can only change hours for your own characters.
+    match /availability/{id} {
+      allow read: if isMember();
+      allow create, update: if isMember()
+        && request.resource.data.keys().hasOnly(['week', 'playerId', 'slots'])
+        && request.resource.data.week is string
+        && request.resource.data.slots is list && request.resource.data.slots.size() <= 168
+        && id == request.resource.data.week + '_' + request.resource.data.playerId
+        && ownsPlayer(request.resource.data.playerId);
+      allow delete: if isMember() && ownsPlayer(resource.data.playerId);
+    }
+
+    // Anyone in the group can report anyone as late. Only the person who filed a report
+    // can delete it. The late player can add or edit their excuse, nothing else.
+    match /lates/{id} {
+      allow read: if isMember();
+      allow create: if isMember()
+        && request.resource.data.keys().hasOnly(['playerId', 'minutes', 'note', 'at', 'reportedBy', 'reportedByName'])
+        && exists(/databases/$(database)/documents/players/$(request.resource.data.playerId))
+        && request.resource.data.minutes is int
+        && request.resource.data.minutes >= 1 && request.resource.data.minutes <= 600
+        && request.resource.data.note is string && request.resource.data.note.size() <= 140
+        && request.resource.data.reportedByName is string && request.resource.data.reportedByName.size() <= 40
+        && request.resource.data.at == request.time
+        && request.resource.data.reportedBy == request.auth.uid;
+      allow update: if isMember()
+        && ownsPlayer(resource.data.playerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['excuse'])
+        && request.resource.data.excuse is string && request.resource.data.excuse.size() <= 140;
+      allow delete: if isMember() && resource.data.reportedBy == request.auth.uid;
+    }
+  }
+}

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team Serious Face</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Team Serious Face</h1>
+    <div class="who" id="who" hidden>
+      <label for="me">Playing as</label>
+      <select id="me"></select>
+      <span id="user-email" class="muted"></span>
+      <button id="sign-out" class="secondary">Sign out</button>
+    </div>
+  </header>
+
+  <div id="setup-warning" class="banner" hidden>
+    Firebase is not configured yet. Fill in <code>firebase-config.js</code> (see README).
+  </div>
+
+  <div id="signin" class="landing" hidden>
+    <div class="hero">
+      <p class="eyebrow">World of Warcraft · Mythic+</p>
+      <h2>When are we pushing keys?</h2>
+      <p class="lead">The group's shared schedule. Mark when you can play, see when everyone overlaps,
+        and check each other's Raider.io score, gear and keys.</p>
+      <button id="sign-in" class="google">
+        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/>
+          <path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/>
+          <path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/>
+          <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.7c-2.1 1.4-4.8 2.3-8.5 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <p id="signin-error" class="error" hidden></p>
+      <p class="muted small">Members only. Ask the group admin to add your Google account.</p>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <span class="icon">🗓️</span>
+        <h3>Shared schedule</h3>
+        <p>Drag over the hours you can play. Everyone sees changes live.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">✅</span>
+        <h3>Best times</h3>
+        <p>Hours when the whole group is free light up, with the best windows listed.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">🔑</span>
+        <h3>Roster &amp; keys</h3>
+        <p>Raider.io score, item level, weekly runs, plus the key you're holding.</p>
+      </div>
+    </div>
+  </div>
+
+  <main id="app" hidden>
+    <section class="schedule">
+      <div class="week-nav">
+        <button id="prev-week" aria-label="Previous week">‹</button>
+        <h2 id="week-label"></h2>
+        <button id="next-week" aria-label="Next week">›</button>
+        <button id="copy-week" class="secondary">Copy my last week</button>
+        <button id="clear-week" class="secondary">Clear my week</button>
+      </div>
+      <p class="hint">Click or drag over the hours you can play. Times are in your local time zone.</p>
+      <div id="grid" class="grid"></div>
+      <div id="best" class="best"></div>
+      <div id="shame" class="shame"></div>
+    </section>
+
+    <section class="roster">
+      <div class="roster-head">
+        <h2>Roster</h2>
+        <button id="refresh" class="secondary">Refresh Raider.io</button>
+      </div>
+      <div id="cards" class="cards"></div>
+
+      <form id="add-player" class="add-player">
+        <h3>Add character</h3>
+        <input name="name" placeholder="Character name" required>
+        <input name="realm" placeholder="Realm (e.g. Draenor)" required>
+        <select name="region">
+          <option value="eu">EU</option><option value="us">US</option>
+          <option value="kr">KR</option><option value="tw">TW</option>
+        </select>
+        <button type="submit">Add</button>
+        <p id="add-error" class="error" hidden></p>
+      </form>
+    </section>
+  </main>
+
+  <dialog id="late-dialog">
+    <form method="dialog" id="late-form">
+      <h3>⏰ <span id="late-name"></span> was late</h3>
+      <label>Minutes late
+        <input name="minutes" type="number" min="1" max="600" value="10" required>
+      </label>
+      <label>Note <span class="muted">(optional)</span>
+        <input name="note" maxlength="140" placeholder="Showed up mid-pull…">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="late-cancel">Cancel</button>
+        <button type="submit">Report</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="excuse-dialog">
+    <form method="dialog" id="excuse-form">
+      <h3>Your excuse</h3>
+      <p class="muted small" id="excuse-context"></p>
+      <label>Excuse
+        <input name="excuse" maxlength="140" placeholder="Dinner ran long…">
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="excuse-cancel">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

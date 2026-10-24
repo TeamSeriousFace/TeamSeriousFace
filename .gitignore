@@ -1,0 +1,9 @@
+# Real rules contain members' email addresses. Publish them in the Firebase console;
+# firestore.rules.example is the committed template.
+firestore.rules
+
+# Local tooling
+.claude/
+node_modules/
+.DS_Store
+Thumbs.db
