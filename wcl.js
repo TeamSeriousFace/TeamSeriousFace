@@ -160,7 +160,7 @@ export async function recentTeamReportCodes(characters, minPlayers) {
 const REPORT_FIELDS = `
   code startTime
   masterData { actors(type: "Player") { id name server subType } }
-  fights { id name startTime endTime kill keystoneLevel keystoneTime keystoneBonus
+  fights { id name startTime endTime inProgress kill keystoneLevel keystoneTime keystoneBonus
            friendlyPlayers friendlySpecs averageItemLevel }`;
 
 export async function fetchReports(codes) {
@@ -183,7 +183,8 @@ export function teamRuns(report, characters, minPlayers) {
   const team = characters.map((c) => ({ name: c.name, n: norm(c.name), s: norm(c.realm) }));
   const actors = new Map((report.masterData?.actors ?? []).map((a) => [a.id, a]));
   return (report.fights ?? [])
-    .filter((f) => f.keystoneLevel > 0)
+    // Skip keys still being played (live logging); they are picked up once finished.
+    .filter((f) => f.keystoneLevel > 0 && !f.inProgress)
     .map((f) => {
       const players = (f.friendlyPlayers ?? []).map((id, i) => {
         const a = actors.get(id);

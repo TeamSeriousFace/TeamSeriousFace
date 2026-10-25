@@ -945,8 +945,17 @@ async function refreshLogs({ code } = {}) {
     const reports = await wcl.fetchReports(codes);
     if (code && !reports.length) throw new Error("Couldn't open that log. If it's private, the uploader needs to make it unlisted or public.");
     const found = reports.flatMap((r) => wcl.teamRuns(r, chars, MIN_TEAM_IN_RUN));
-    const known = new Set(state.runs.map((r) => r.id));
-    const fresh = found.filter((r) => !known.has(runId(r))).slice(0, 20);
+    const known = new Map(state.runs.map((r) => [r.id, r]));
+    // New runs, plus saved runs that look different in the log now: e.g. imported mid-key while
+    // live logging (before this check existed) and finished since. Those are corrected and re-posted.
+    const changed = (run) => {
+      const saved = known.get(runId(run));
+      if (!saved) return true;
+      const f = run.fight;
+      return (f.keystoneBonus ?? 0) !== saved.bonus || !!f.kill !== saved.kill
+        || Math.round(f.keystoneTime ?? f.endTime - f.startTime) !== saved.timeMs;
+    };
+    const fresh = found.filter(changed).slice(0, 20);
     for (const [i, run] of fresh.entries()) {
       logs.status = `Importing run ${i + 1} of ${fresh.length}…`;
       renderLogs();
@@ -963,7 +972,7 @@ async function refreshLogs({ code } = {}) {
     if (!code) await setDoc(doc(db, "meta", "logs"), { lastRefresh: serverTimestamp(), byName: myDisplayName() });
     logs.notice = code && !found.length
       ? `No Mythic+ runs with ${MIN_TEAM_IN_RUN}+ of the team in that log.`
-      : fresh.length ? `Added ${fresh.length} new run${fresh.length === 1 ? "" : "s"}.` : "No new runs.";
+      : fresh.length ? `Added or updated ${fresh.length} run${fresh.length === 1 ? "" : "s"}.` : "No new runs.";
   } catch (e) {
     console.error(e);
     logs.error = e.message;
