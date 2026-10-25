@@ -18,6 +18,17 @@ const CLASS_COLORS = {
   Hunter: "#AAD372", Mage: "#3FC7EB", Monk: "#00FF98", Paladin: "#F48CBA", Priest: "#FFFFFF",
   Rogue: "#FFF468", Shaman: "#0070DD", Warlock: "#8788EE", Warrior: "#C69B6D",
 };
+// The team, shown on the login page. Public: anyone with the link sees these names
+// (they're public on Raider.io and the Armory anyway).
+// Shown tank, healer, then DPS; within a role in this order (left to right as in the team picture).
+const TEAM = [
+  { name: "Magabronkel", realm: "kazzak", region: "eu" },
+  { name: "Drottdk", realm: "twisting-nether", region: "eu" },
+  { name: "Derrep", realm: "twisting-nether", region: "eu" },
+  { name: "Axioow", realm: "kazzak", region: "eu" },
+  { name: "Yogurtdip", realm: "tarren-mill", region: "eu" },
+];
+
 const RIO_FIELDS = [
   "mythic_plus_scores_by_season:current",
   "mythic_plus_weekly_highest_level_runs",
@@ -30,7 +41,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 
 const state = {
   user: null,           // firebase auth user
-  players: [],          // [{id, name, realm, region, keyDungeon, keyLevel, ownerUid}]
+  players: [],          // [{id, name, realm, region, keyDungeon, keyLevel, keyUpdatedAt, ownerUid}]
   availability: {},     // playerId -> Set("d-h") for the shown week
   busy: {},             // playerId -> Set(dayIndex) the player can't play in the shown week
   lates: [],            // [{id, playerId, minutes, note, at, reportedBy, reportedByName, excuse?}]
@@ -80,6 +91,7 @@ const myPlayers = () => state.players.filter(isMine);
 
 function showSignin(message) {
   $("#signin").hidden = false;
+  document.body.classList.add("signed-out");
   $("#app").hidden = true;
   $("#who").hidden = true;
   $("#signin-error").textContent = message ?? "";
@@ -94,6 +106,31 @@ function onDenied(err) {
   signOut(auth);
   showSignin(`${email} is not on the group's allowlist. Ask the admin to add you.`);
 }
+
+// Login page: the team with portrait, role and class colour, fetched live from Raider.io.
+async function renderTeam() {
+  const profiles = await Promise.all(TEAM.map((c) =>
+    fetch(`https://raider.io/api/v1/characters/profile?region=${c.region}`
+      + `&realm=${encodeURIComponent(c.realm)}&name=${encodeURIComponent(c.name)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .catch(() => null)));
+  // Tank first, then healer, then DPS; within a role, TEAM order is kept.
+  const roleOrder = { TANK: 0, HEALING: 1, DPS: 2 };
+  const found = profiles.filter(Boolean)
+    .sort((a, b) => (roleOrder[a.active_spec_role] ?? 3) - (roleOrder[b.active_spec_role] ?? 3));
+  if (!found.length) return;
+  $("#team").innerHTML = found.map((c) => {
+    const role = ROLES[c.active_spec_role];
+    return `<a class="member" href="${esc(c.profile_url)}" target="_blank" rel="noopener"
+        title="${esc(`${c.active_spec_name} ${c.class}`)}">
+      <img src="${esc(c.thumbnail_url)}" alt="">
+      <span class="mname" style="color:${CLASS_COLORS[c.class] ?? "var(--text)"}">${esc(c.name)}</span>
+      ${role ? `<span class="role ${role.cls ?? ""}">${role.icon}</span>` : ""}
+    </a>`;
+  }).join("");
+  $("#team").hidden = false;
+}
+renderTeam();
 
 $("#sign-in").addEventListener("click", () =>
   signInWithPopup(auth, new GoogleAuthProvider()).catch((e) => showSignin(e.message)));
@@ -113,6 +150,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
   $("#signin").hidden = true;
+  document.body.classList.remove("signed-out");
   $("#app").hidden = false;
   $("#who").hidden = false;
   $("#user-email").textContent = user.email;
@@ -206,7 +244,9 @@ async function loadDungeons() {
     const current = seasons
       .filter((s) => s.is_main_season && new Date(s.starts?.eu ?? 0).getTime() <= now)
       .sort((a, b) => new Date(b.starts.eu) - new Date(a.starts.eu))[0];
-    state.dungeons = (current?.dungeons ?? []).map((d) => d.name).sort();
+    state.dungeons = (current?.dungeons ?? [])
+      .map((d) => ({ name: d.name, short: d.short_name, icon: d.icon_url }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     renderRoster();
   } catch {
     // Key dropdown falls back to free text if this fails.
@@ -452,19 +492,61 @@ function runChip(r) {
 function keyEditor(p) {
   if (p.id !== state.me) {
     return p.keyLevel
-      ? `<div class="key">🔑 <b>${esc(p.keyDungeon || "?")} +${esc(p.keyLevel)}</b></div>`
+      ? `<div class="key ${isStaleKey(p) ? "muted" : ""}">🔑 <b>${esc(p.keyDungeon || "?")} +${esc(p.keyLevel)}</b>${isStaleKey(p) ? " <i>(last week?)</i>" : ""}</div>`
       : `<div class="key muted">🔑 No key set</div>`;
   }
   const options = state.dungeons.length
     ? `<select data-field="keyDungeon"><option value="">Dungeon…</option>${state.dungeons.map((d) =>
-        `<option ${d === p.keyDungeon ? "selected" : ""}>${esc(d)}</option>`).join("")}</select>`
+        `<option ${d.name === p.keyDungeon ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>`
     : `<input data-field="keyDungeon" placeholder="Dungeon" value="${esc(p.keyDungeon)}" style="width:120px">`;
   return `<div class="key">🔑 My key: ${options}
     <input data-field="keyLevel" type="number" min="2" max="40" placeholder="+lvl" value="${esc(p.keyLevel)}"></div>`;
 }
 
+// Weekly reset: EU Wednesday 04:00 UTC, US Tuesday 15:00 UTC, KR/TW Wednesday 23:00 UTC.
+const RESETS = { eu: [3, 4], us: [2, 15], kr: [3, 23], tw: [3, 23] };
+
+function lastReset(region) {
+  const [day, hour] = RESETS[region] ?? RESETS.eu;
+  const d = new Date();
+  d.setUTCHours(hour, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() - day + 7) % 7));
+  if (d > new Date()) d.setUTCDate(d.getUTCDate() - 7);
+  return d;
+}
+
+// A key entered before this week's reset is probably gone or changed.
+const isStaleKey = (p) => !!p.keyUpdatedAt && p.keyUpdatedAt.seconds * 1000 < lastReset(p.region).getTime();
+
+function renderKeys() {
+  const withKey = state.players.filter((p) => p.keyLevel);
+  const without = state.players.filter((p) => !p.keyLevel);
+  if (!state.players.length) { $("#keys").innerHTML = ""; return; }
+  const sorted = [...withKey].sort((a, b) =>
+    isStaleKey(a) - isStaleKey(b) || b.keyLevel - a.keyLevel || (a.keyDungeon ?? "").localeCompare(b.keyDungeon ?? ""));
+  const dungeon = (name) => state.dungeons.find((d) => d.name === name);
+  $("#keys").innerHTML = `<h3>🔑 Keys <span class="muted">(${withKey.length}/${state.players.length})</span></h3>`
+    + (sorted.length ? `<ul>${sorted.map((p) => {
+      const d = dungeon(p.keyDungeon);
+      const r = state.rio[p.id] ?? {};
+      const stale = isStaleKey(p);
+      return `<li class="${stale ? "stale" : ""}" title="${stale ? "Entered before this week's reset, may be out of date" : ""}">
+        ${d?.icon ? `<img class="dicon" src="${esc(d.icon)}" alt="">` : `<span class="dicon"></span>`}
+        <b class="lvl">+${esc(p.keyLevel)}</b>
+        <span class="dname">${esc(p.keyDungeon || "Unknown dungeon")}</span>
+        ${stale ? `<span class="stale-tag">last week?</span>` : ""}
+        <span class="holder">
+          ${r.thumbnail_url ? `<img src="${esc(r.thumbnail_url)}" alt="">` : ""}
+          <span style="color:${CLASS_COLORS[r.class] ?? "var(--text)"}">${esc(p.name)}</span>
+        </span>
+      </li>`;
+    }).join("")}</ul>` : `<p class="muted">Nobody has entered a key yet.</p>`)
+    + (without.length && withKey.length ? `<p class="muted small">No key set: ${without.map((p) => esc(p.name)).join(", ")}</p>` : "");
+}
+
 function renderRoster() {
   $(".roster").classList.toggle("needs-char", !myPlayers().length);
+  renderKeys();
   if (!state.players.length) {
     $("#cards").innerHTML = `<p class="muted">No characters yet.</p>`;
     return;
@@ -512,7 +594,7 @@ $("#cards").addEventListener("change", (e) => {
   const field = e.target.dataset.field;
   if (!field || !state.me) return;
   const value = field === "keyLevel" ? (e.target.value ? Number(e.target.value) : null) : e.target.value;
-  updateDoc(doc(db, "players", state.me), { [field]: value });
+  updateDoc(doc(db, "players", state.me), { [field]: value, keyUpdatedAt: serverTimestamp() });
 });
 
 $("#cards").addEventListener("click", async (e) => {

@@ -23,7 +23,7 @@ service cloud.firestore {
     }
 
     function validPlayer(d) {
-      return d.keys().hasOnly(['name', 'realm', 'region', 'keyDungeon', 'keyLevel', 'ownerUid', 'createdAt'])
+      return d.keys().hasOnly(['name', 'realm', 'region', 'keyDungeon', 'keyLevel', 'keyUpdatedAt', 'ownerUid', 'createdAt'])
         && d.name is string && d.name.size() <= 24
         && d.realm is string && d.realm.size() <= 40
         && d.region in ['eu', 'us', 'kr', 'tw']

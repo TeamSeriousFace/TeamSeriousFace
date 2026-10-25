@@ -52,19 +52,96 @@ button { cursor: pointer; background: var(--accent); color: #111; border-color: 
 button.secondary { background: var(--panel-2); color: var(--text); border-color: var(--border); font-weight: 400; }
 button:hover { filter: brightness(1.1); }
 
-.landing { max-width: 960px; margin: 0 auto; padding: 72px 24px 48px; }
+/* The landing page carries the team name itself, so the top bar is only shown when signed in. */
+body.signed-out header { display: none; }
+.landing { position: relative; padding: 0 24px 48px; overflow-x: clip; }
+.hero, .features { position: relative; max-width: 960px; margin-left: auto; margin-right: auto; }
 .hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.hero h2, .hero .tagline, .hero .eyebrow, .hero .small { text-shadow: 0 2px 12px rgb(0 0 0 / .8); }
+
+/* Team picture. Phones: a full-width 16:9 banner with the text below it.
+   Wider screens: fills the top of the page with the text in the empty sky on the left. */
+.hero-bg {
+  position: absolute; left: 0; right: 0; top: 0;
+  height: 56.25vw;
+  background: url(images/hero.webp) center 35% / cover no-repeat;
+}
+.hero-bg::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, var(--bg));
+}
+.hero { padding-top: calc(56.25vw - 12px); }
+
+@media (min-width: 900px) {
+  .hero-bg { height: min(56.25vw, 100vh); }
+  .hero-bg::after {
+    background:
+      linear-gradient(to right, rgb(10 12 16 / .75), rgb(10 12 16 / .35) 35%, transparent 55%),
+      linear-gradient(to bottom, rgb(10 12 16 / .3), transparent 25%, transparent 65%, var(--bg));
+  }
+  .hero {
+    max-width: 1200px;
+    min-height: min(56.25vw, 100vh);
+    padding-top: max(90px, min(7vw, 104px)); /* room for the team strip above */
+    align-items: flex-start;
+    text-align: left;
+  }
+  .hero > * { max-width: 440px; }
+  /* All five on one line in a strip at the top of the page, over the sky, clear of the characters. */
+  .hero > .team {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    max-width: none; margin: 0; flex-wrap: nowrap; justify-content: center; gap: 10px;
+  }
+  .hero > .team .member { gap: 8px; padding: 5px 14px 5px 5px; font-size: 15px; }
+  .hero > .team .member img { width: 32px; height: 32px; }
+  .hero > .team .member .role { font-size: 16px; }
+  .hero > .team .member .role.heal { font-size: 18px; }
+  .hero h2 { font-size: clamp(40px, 4.4vw, 60px); }
+  /* Cards sit on the dark ground at the bottom of the picture instead of below it. */
+  .landing .features { margin-top: calc(min(56.25vw, 100vh) * -.17); }
+}
 .hero .eyebrow { margin: 0; color: var(--accent); text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 600; }
 .hero h2 { font-size: clamp(28px, 5vw, 44px); line-height: 1.1; margin: 0; }
-.hero .lead { max-width: 560px; margin: 0; color: var(--muted); font-size: 16px; }
+.hero .tagline { margin: -4px 0 0; color: var(--accent); font-size: 17px; font-style: italic; }
+/* Google's dark button style (#131314 + standard G logo), with a gold glow around it to match the page.
+   Google's branding rules allow the dark background; the G itself must stay unchanged. */
 .hero .google {
-  display: inline-flex; align-items: center; gap: 10px; margin-top: 12px;
-  padding: 11px 20px; background: #fff; color: #1f1f1f; border-color: #fff; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 12px; margin-top: 16px;
+  padding: 12px 24px 12px 18px;
+  background: #131314; color: #e3e3e3;
+  border: 1px solid #8e918f; border-radius: 999px;
+  font-weight: 500; font-size: 15px; letter-spacing: .01em;
+  box-shadow: 0 0 0 1px rgb(245 185 66 / .15), 0 0 24px rgb(245 185 66 / .12);
+  transition: box-shadow .25s ease, border-color .25s ease, transform .15s ease;
 }
+.hero .google:hover {
+  filter: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgb(245 185 66 / .5), 0 0 32px rgb(245 185 66 / .35);
+}
+.hero .google:active { transform: scale(.98); }
+.hero .google:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .small { font-size: 12px; margin: 0; }
 .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 64px; }
-@media (max-width: 720px) { .features { grid-template-columns: 1fr; } .landing { padding-top: 40px; } }
-.feature { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+@media (max-width: 720px) { .features { grid-template-columns: 1fr; } }
+.feature {
+  background: rgb(24 27 34 / .72); border: 1px solid rgb(255 255 255 / .08); border-radius: 10px; padding: 18px;
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+
+/* Team members under the sign-in button */
+.team { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+.member {
+  display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px;
+  border-radius: 999px; text-decoration: none; font-size: 13px; font-weight: 600;
+  background: rgb(10 12 16 / .6); border: 1px solid rgb(255 255 255 / .1);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  transition: border-color .2s ease;
+}
+.member:hover { border-color: var(--accent); }
+.member img { width: 26px; height: 26px; border-radius: 50%; }
+.member .role { font-size: 14px; line-height: 1; }
+.member .role.heal { color: #3fdc7f; font-weight: 700; font-size: 15px; }
 .feature .icon { font-size: 22px; }
 .feature h3 { margin: 10px 0 6px; }
 .feature p { margin: 0; color: var(--muted); }
@@ -164,6 +241,23 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 /* Roster */
 .roster-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; order: -2; }
 .cards { display: flex; flex-direction: column; gap: 10px; }
+
+/* Group keys list */
+.keys-panel { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.keys-panel:empty { display: none; }
+.keys-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.keys-panel li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px 4px 4px; border-radius: 6px; background: var(--panel-2);
+}
+.keys-panel li.stale { opacity: .5; }
+.keys-panel .dicon { width: 24px; height: 24px; border-radius: 4px; flex: none; background: var(--panel); }
+.keys-panel .lvl { color: var(--accent); min-width: 30px; font-variant-numeric: tabular-nums; }
+.keys-panel .dname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keys-panel .stale-tag { font-size: 11px; color: var(--muted); font-style: italic; }
+.keys-panel .holder { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.keys-panel .holder img { width: 18px; height: 18px; border-radius: 3px; }
+.keys-panel p { margin: 6px 0 0; }
 
 .card {
   border: 1px solid var(--border);

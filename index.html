@@ -22,11 +22,11 @@
   </div>
 
   <div id="signin" class="landing" hidden>
+    <div class="hero-bg" aria-hidden="true"></div>
     <div class="hero">
       <p class="eyebrow">World of Warcraft · Mythic+</p>
-      <h2>When are we pushing keys?</h2>
-      <p class="lead">The group's shared schedule. Mark when you can play, see when everyone overlaps,
-        and check each other's Raider.io score, gear and keys.</p>
+      <h2>Team Serious Face</h2>
+      <p class="tagline">Serious faces. Seriously high keys. Questionable timing.</p>
       <button id="sign-in" class="google">
         <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
           <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/>
@@ -37,14 +37,15 @@
         Sign in with Google
       </button>
       <p id="signin-error" class="error" hidden></p>
-      <p class="muted small">Members only. Ask the group admin to add your Google account.</p>
+      <p class="muted small">Team Serious Face members only. Ask the group admin to add your Google account.</p>
+      <div id="team" class="team" hidden></div>
     </div>
 
     <div class="features">
       <div class="feature">
         <span class="icon">🗓️</span>
         <h3>Shared schedule</h3>
-        <p>Drag over the hours you can play. Everyone sees changes live.</p>
+        <p>Mark the hours you can play. Everyone sees changes live.</p>
       </div>
       <div class="feature">
         <span class="icon">✅</span>
@@ -84,6 +85,7 @@
         <h2>Roster</h2>
         <button id="refresh" class="secondary">Refresh Raider.io</button>
       </div>
+      <div id="keys" class="keys-panel"></div>
       <div id="cards" class="cards"></div>
 
       <form id="add-player" class="add-player">
