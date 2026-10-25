@@ -204,6 +204,38 @@ section {
 .week-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .week-pick, .week-actions { display: flex; gap: 8px; align-items: center; }
 .week-pick h2 { min-width: 180px; text-align: center; }
+
+/* Round WoW-style arrow buttons: embossed gold ring around a dark bronze centre. */
+.wow-arrow {
+  width: 34px; height: 34px; padding: 0; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 2px solid;
+  border-color: #f6dc8a #c4932f #6e4a12 #c4932f; /* light from above */
+  background: radial-gradient(circle at 50% 35%, #4a3415 0%, #1d1307 65%, #0d0904 100%);
+  box-shadow:
+    0 0 0 1px #000,
+    inset 0 1px 0 rgb(255 230 160 / .25),
+    inset 0 -2px 4px rgb(0 0 0 / .6),
+    0 2px 6px rgb(0 0 0 / .6);
+  color: #f2c75c;
+  transition: box-shadow .2s ease, color .2s ease, transform .1s ease;
+}
+.wow-arrow svg {
+  width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.6;
+  stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px #000);
+}
+.wow-arrow:hover {
+  filter: none; color: #ffe9a8;
+  box-shadow:
+    0 0 0 1px #000,
+    inset 0 1px 0 rgb(255 230 160 / .35),
+    inset 0 -2px 4px rgb(0 0 0 / .6),
+    0 0 12px rgb(245 185 66 / .55);
+}
+.wow-arrow:active { transform: translateY(1px); }
+.wow-arrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .hint { color: var(--muted); margin: 8px 0 12px; }
 
 /* Schedule / Logs / Hall of Shame */
@@ -213,6 +245,16 @@ section {
   color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .view-tabs button:hover { filter: none; color: var(--text); }
+.view-tabs button { display: inline-flex; align-items: center; gap: 7px; }
+/* WoW-style icons: square with a dark edge and thin gold frame; dimmed until the tab is active. */
+.tab-icon {
+  width: 22px; height: 22px; flex: none; border-radius: 4px;
+  border: 1px solid #000; box-shadow: 0 0 0 1px rgb(196 147 47 / .75);
+  filter: grayscale(.5) brightness(.75);
+  transition: filter .2s ease;
+}
+.tab-icon.round { border: 0; border-radius: 50%; box-shadow: none; width: 24px; height: 24px; }
+.view-tabs button:hover .tab-icon, .view-tabs button.on .tab-icon { filter: none; }
 .view-tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
 .tab-panel { padding-top: 6px; }
 .tab-panel > .logs, .tab-panel > .shame { margin-top: 8px; padding-top: 0; border-top: 0; }
@@ -352,8 +394,12 @@ section {
 .card .stats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .card .stats span b { color: var(--text); }
 .card .runs { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 3px; }
-.card .run { font-size: 10px; padding: 1px 4px; border-radius: 4px; background: var(--panel); border: 1px solid var(--border); }
-.card .run.timed { border-color: var(--good); }
+.card .run {
+  font-size: 10px; padding: 1px 5px; border-radius: 4px; color: var(--muted);
+  background: rgb(0 0 0 / .25); border: 1px solid rgb(255 255 255 / .08);
+}
+.card .run.timed { color: var(--text); }
+.card .run .plus { color: var(--accent); font-weight: 700; letter-spacing: -1px; margin-right: 1px; }
 .card .key { margin-top: 8px; display: flex; gap: 6px; align-items: center; font-size: 12px; }
 .card .key select, .card .key input { padding: 3px 6px; font-size: 12px; }
 .card .key input { width: 56px; flex: none; }

@@ -517,7 +517,7 @@ function fmtTime(ms) {
 function runChip(r) {
   const timed = r.clear_time_ms <= r.par_time_ms;
   const plus = timed ? "+".repeat(Math.max(1, r.num_keystone_upgrades)) : "";
-  return `<span class="run ${timed ? "timed" : ""}" title="${esc(r.dungeon)} – ${fmtTime(r.clear_time_ms)} / ${fmtTime(r.par_time_ms)}">${esc(r.short_name)} ${plus}${r.mythic_level}</span>`;
+  return `<span class="run ${timed ? "timed" : ""}" title="${esc(r.dungeon)} – ${fmtTime(r.clear_time_ms)} / ${fmtTime(r.par_time_ms)}${timed ? "" : " (over time)"}">${esc(r.short_name)} ${plus ? `<b class="plus">${plus}</b>` : ""}${r.mythic_level}</span>`;
 }
 
 function keyEditor(p) {

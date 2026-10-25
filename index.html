@@ -81,9 +81,9 @@
     <section class="schedule">
       <div class="week-nav">
         <div class="week-pick">
-          <button id="prev-week" aria-label="Previous week">‹</button>
+          <button id="prev-week" class="wow-arrow" aria-label="Previous week"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5 5 8l5.5 5.5"/></svg></button>
           <h2 id="week-label"></h2>
-          <button id="next-week" aria-label="Next week">›</button>
+          <button id="next-week" class="wow-arrow" aria-label="Next week"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 2.5 11 8l-5.5 5.5"/></svg></button>
         </div>
         <div class="week-actions">
           <button id="copy-week" class="secondary">Copy my last week</button>
@@ -91,9 +91,9 @@
         </div>
       </div>
       <div class="view-tabs" role="tablist">
-        <button role="tab" data-view="schedule">📅 Schedule</button>
-        <button role="tab" data-view="runs">📜 Logs</button>
-        <button role="tab" data-view="shame">😬 <span class="hide-sm">Hall of </span>Shame</button>
+        <button role="tab" data-view="schedule"><img class="tab-icon" src="images/icons/schedule.jpg" alt="">Schedule</button>
+        <button role="tab" data-view="runs"><img class="tab-icon round" src="images/icons/logs.png" alt="">Logs</button>
+        <button role="tab" data-view="shame"><img class="tab-icon" src="images/icons/shame.jpg" alt=""><span class="hide-sm">Hall of </span>Shame</button>
       </div>
       <div class="tab-panel" data-panel="schedule">
         <div id="busy-row" class="busy-row"></div>
