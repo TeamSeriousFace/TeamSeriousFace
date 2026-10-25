@@ -134,6 +134,25 @@
     </form>
   </dialog>
 
+  <dialog id="discord-dialog">
+    <form id="discord-form">
+      <h3>Discord notifications</h3>
+      <p class="muted small">New team runs from Warcraft Logs are posted to a Discord channel.
+        In Discord: <b>Edit channel → Integrations → Webhooks → New Webhook → Copy Webhook URL</b>, then paste it here.
+        It's saved in the database (members only), never in the code.</p>
+      <label>Webhook URL
+        <input name="url" type="url" placeholder="https://discord.com/api/webhooks/…" autocomplete="off" spellcheck="false">
+      </label>
+      <p id="discord-msg" class="small" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="discord-remove">Turn off</button>
+        <button type="button" class="secondary" id="discord-test">Send test</button>
+        <button type="button" class="secondary" id="discord-cancel">Close</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="late-dialog">
     <form method="dialog" id="late-form">
       <h3>⏰ <span id="late-name"></span> was late</h3>

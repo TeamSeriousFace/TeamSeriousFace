@@ -443,7 +443,8 @@ section {
 .logs-head h3 { margin: 0; }
 .logs-head button { padding: 3px 10px; font-size: 12px; }
 .logs > p { margin: 6px 0 0; }
-.logs .notice { color: var(--good); }
+.logs .notice, dialog .notice { color: var(--good); }
+.discord-line .ok { color: #7c8cff; font-weight: 600; } /* Discord blurple */
 .log-paste { display: flex; gap: 6px; margin-top: 10px; }
 .log-paste input { flex: 1; min-width: 0; font-size: 12px; }
 .log-paste button { font-size: 12px; padding: 4px 12px; }

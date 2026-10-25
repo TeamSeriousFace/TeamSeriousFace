@@ -24,13 +24,14 @@ It's a static site on GitHub Pages, and the data is stored in Firebase Firestore
 The config values are not secret and can be committed. Access is controlled by the rules.
 
 ### Warcraft Logs (optional)
-The "Team runs" section imports Mythic+ runs from Warcraft Logs where at least 2 roster characters played
+The "Logs" tab imports Mythic+ runs from Warcraft Logs where at least 2 roster characters played
 (`MIN_TEAM_IN_RUN` in `app.js`). It uses Warcraft Logs' PKCE login, so there's no secret on the site.
 1. At <https://www.warcraftlogs.com/api/clients/>, create a client with **Public Client** ticked and these redirect URLs:
    `https://teamseriousface.github.io/` and `http://localhost:3000/`.
 2. Put its client ID in `warcraftLogsClientId` in `firebase-config.js`. The section stays hidden until it's set.
 3. A member with a Warcraft Logs account clicks **Connect Warcraft Logs**. Their browser then checks for new runs
-   (at most every 30 minutes) and saves them in Firestore, so everyone else sees them without an account.
+   (every 5 minutes while the site is open, shared across the group) and saves them in Firestore,
+   so everyone else sees them without an account. New runs can also be posted to Discord (Logs tab → Discord: set up).
 
 ### 2. Run locally
 ES modules need a real web server, so opening `index.html` as a file won't work:

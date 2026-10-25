@@ -33,7 +33,7 @@ const TEAM = [
 // Warcraft Logs: only runs with at least this many roster characters are imported.
 const MIN_TEAM_IN_RUN = 2;
 // A connected member's browser looks for new logs when the last check is older than this.
-const LOGS_AUTO_REFRESH_MINUTES = 30;
+const LOGS_AUTO_REFRESH_MINUTES = 5;
 
 const RIO_FIELDS = [
   "mythic_plus_scores_by_season:current",
@@ -54,8 +54,9 @@ const state = {
   rio: {},              // playerId -> raider.io profile | {error}
   dungeons: [],         // current season dungeons from raider.io
   runs: [],             // imported Warcraft Logs runs, newest first
+  discordWebhook: "",   // where new runs are announced (config/discord), "" = off
   // day: selected day tab in the shown week (null = today, or the latest day with runs)
-  logs: { meta: null, metaLoaded: false, busy: false, status: "", notice: "", error: "", open: null, day: null, autoDone: false },
+  logs: { meta: null, metaLoaded: false, busy: false, status: "", notice: "", error: "", open: null, day: null, lastAttempt: 0 },
   me: localStorage.getItem("me") || "",
   weekStart: mondayOf(new Date()),
   unsubAvailability: null,
@@ -149,6 +150,7 @@ let unsubPlayers = null;
 let unsubLates = null;
 let unsubRuns = null;
 let unsubLogsMeta = null;
+let unsubDiscord = null;
 
 onAuthStateChanged(auth, (user) => {
   state.user = user;
@@ -156,8 +158,9 @@ onAuthStateChanged(auth, (user) => {
   unsubLates?.();
   unsubRuns?.();
   unsubLogsMeta?.();
+  unsubDiscord?.();
   state.unsubAvailability?.();
-  unsubPlayers = unsubLates = unsubRuns = unsubLogsMeta = state.unsubAvailability = null;
+  unsubPlayers = unsubLates = unsubRuns = unsubLogsMeta = unsubDiscord = state.unsubAvailability = null;
   if (!user) {
     if ($("#signin-error").hidden) showSignin();
     return;
@@ -192,6 +195,11 @@ onAuthStateChanged(auth, (user) => {
     renderLogs();
     maybeAutoRefreshLogs();
   }, (err) => console.error("Could not load logs status:", err));
+  // Discord webhook for run announcements. Members-only data, never in the code or the repo.
+  unsubDiscord = onSnapshot(doc(db, "config", "discord"), (snap) => {
+    state.discordWebhook = snap.exists() ? snap.data().webhookUrl : "";
+    renderLogs();
+  }, (err) => console.error("Could not load Discord settings:", err));
   subscribeWeek();
   loadDungeons();
 });
@@ -871,6 +879,58 @@ function runDoc({ report, fight, players }, details) {
   };
 }
 
+// ---------- Discord announcements ----------
+
+// Only fresh runs are announced, so connecting for the first time doesn't flood the channel.
+const ANNOUNCE_RUNS_NEWER_THAN_HOURS = 12;
+const DISCORD_WEBHOOK_RE = /^https:\/\/(ptb\.|canary\.)?(discord|discordapp)\.com\/api\/webhooks\/\d+\/[\w-]+$/;
+const TANK_SPECS = ["Blood", "Vengeance", "Guardian", "Brewmaster", "Protection"];
+const HEALER_SPECS = ["Holy", "Discipline", "Restoration", "Mistweaver", "Preservation"];
+
+function roleIcon(p) {
+  if (TANK_SPECS.includes(p.spec)) return "🛡️";
+  if (HEALER_SPECS.includes(p.spec)) return "✚";
+  return "⚔️";
+}
+
+async function postToDiscord(payload, url = state.discordWebhook) {
+  const res = await fetch(`${url}?wait=true`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: "Team Serious Face",
+      avatar_url: new URL("images/favicon.png", location.href).href,
+      ...payload,
+    }),
+  });
+  if (!res.ok) throw new Error(`Discord answered ${res.status}${res.status === 404 ? " (webhook deleted?)" : ""}`);
+}
+
+async function announceRun(r) {
+  if (!state.discordWebhook || Date.now() - r.startedAt > ANNOUNCE_RUNS_NEWER_THAN_HOURS * 3600e3) return;
+  const res = runResult(r);
+  const team = (r.players ?? []).filter((p) => p.team || inRoster(p.name));
+  const top = [...(r.players ?? [])].sort((a, b) => b.dps - a.dps)[0];
+  const deaths = r.deaths?.length ?? 0;
+  const icon = state.dungeons.find((d) => normName(d.name) === normName(r.dungeon))?.icon;
+  await postToDiscord({
+    embeds: [{
+      title: `+${r.level} ${r.dungeon}`,
+      url: `https://www.warcraftlogs.com/reports/${r.code}#fight=${r.fightId}`,
+      description: res.text,
+      color: res.ok ? 0x3fbf7f : 0xff6b6b,
+      thumbnail: icon ? { url: icon } : undefined,
+      fields: [
+        { name: "Team", value: team.map((p) => `${roleIcon(p)} ${p.name}`).join("  ·  ") || "—" },
+        { name: "Deaths", value: deaths ? `💀 ${deaths}` : "None 🎉", inline: true },
+        ...(top ? [{ name: "Top DPS", value: `${top.name} · ${kFormat(top.dps)}`, inline: true }] : []),
+      ],
+      timestamp: new Date(r.startedAt).toISOString(),
+      footer: { text: "Warcraft Logs" },
+    }],
+  });
+}
+
 // Finds runs with at least MIN_TEAM_IN_RUN roster characters and saves new ones for everyone.
 // With `code`, only that report is checked (for pasted links, e.g. unlisted logs).
 async function refreshLogs({ code } = {}) {
@@ -891,7 +951,14 @@ async function refreshLogs({ code } = {}) {
       logs.status = `Importing run ${i + 1} of ${fresh.length}…`;
       renderLogs();
       const details = await wcl.runDetails(run.report.code, run.fight.id);
-      await setDoc(doc(db, "runs", runId(run)), runDoc(run, details));
+      const data = runDoc(run, details);
+      await setDoc(doc(db, "runs", runId(run)), data);
+      try {
+        await announceRun(data);
+      } catch (e) {
+        console.error("Discord:", e);
+        logs.error = `Saved the run, but couldn't post it to Discord: ${e.message}`;
+      }
     }
     if (!code) await setDoc(doc(db, "meta", "logs"), { lastRefresh: serverTimestamp(), byName: myDisplayName() });
     logs.notice = code && !found.length
@@ -908,15 +975,22 @@ async function refreshLogs({ code } = {}) {
 }
 
 // One connected member's browser keeps the shared list fresh; everyone else just reads it.
+// Called on load, when data arrives and every minute while the page is open. The last check is
+// shared through meta/logs, so a browser skips it when someone else checked recently.
 function maybeAutoRefreshLogs() {
   const logs = state.logs;
-  if (logs.autoDone || !wcl.isConfigured() || !wcl.isConnected()) return;
+  if (!state.user || logs.busy || !wcl.isConfigured() || !wcl.isConnected()) return;
   if (!logs.metaLoaded || state.players.length < MIN_TEAM_IN_RUN) return;
-  logs.autoDone = true;
+  const interval = LOGS_AUTO_REFRESH_MINUTES * 60000;
+  if (!logs.justConnected && Date.now() - (logs.lastAttempt ?? 0) < interval) return; // also after errors
   const last = logs.meta?.lastRefresh?.toDate?.();
-  if (logs.justConnected || !last || Date.now() - last.getTime() > LOGS_AUTO_REFRESH_MINUTES * 60000) refreshLogs();
-  logs.justConnected = false;
+  if (logs.justConnected || !last || Date.now() - last.getTime() > interval) {
+    logs.lastAttempt = Date.now();
+    logs.justConnected = false;
+    refreshLogs();
+  }
 }
+setInterval(maybeAutoRefreshLogs, 60000);
 
 // Team members in a run, matched against the current roster so characters added later count too.
 function inRoster(name) {
@@ -979,6 +1053,9 @@ function renderLogs() {
         : `<button class="secondary" data-logs="connect">Connect Warcraft Logs</button>`}
     </div>
     <p class="muted small">${statusText}${connected ? ` · <a href="#" data-logs="disconnect">disconnect</a>` : ""}</p>
+    <p class="muted small discord-line">${state.discordWebhook
+      ? `<span class="ok">● Discord</span>: new runs are posted to your channel · <a href="#" data-logs="discord">settings</a>`
+      : `Discord: not set up · <a href="#" data-logs="discord">set up</a>`}</p>
     ${logs.error ? `<p class="error small">${esc(logs.error)}</p>` : ""}
     ${logs.notice ? `<p class="small notice">${esc(logs.notice)}</p>` : ""}
     ${!connected && !state.runs.length ? `<p class="muted small">Runs where at least ${MIN_TEAM_IN_RUN} of the team played show up here.
@@ -1026,6 +1103,7 @@ $("#logs").addEventListener("click", (e) => {
   if (action) {
     e.preventDefault();
     if (action === "connect") wcl.connect();
+    if (action === "discord") openDiscordDialog();
     if (action === "refresh") refreshLogs();
     if (action === "disconnect" && confirm("Disconnect Warcraft Logs in this browser? The saved runs stay.")) {
       wcl.disconnect();
@@ -1085,11 +1163,69 @@ showView(new URLSearchParams(location.search).has("code") ? "runs" : savedView);
 wcl.handleRedirect().then((done) => {
   if (!done) return;
   state.logs.notice = "Warcraft Logs connected.";
-  state.logs.autoDone = false;
+
   state.logs.justConnected = true; // fetch right away, however recent the last check was
   renderLogs();
   maybeAutoRefreshLogs();
 }).catch((e) => {
   state.logs.error = `Warcraft Logs: ${e.message}`;
   renderLogs();
+});
+
+// ---------- Discord settings dialog ----------
+
+function discordMessage(text, ok) {
+  const el = $("#discord-msg");
+  el.textContent = text;
+  el.className = `small ${ok ? "notice" : "error"}`;
+  el.hidden = !text;
+}
+
+function openDiscordDialog() {
+  const form = $("#discord-form");
+  form.url.value = state.discordWebhook;
+  discordMessage("");
+  $("#discord-remove").hidden = !state.discordWebhook;
+  $("#discord-dialog").showModal();
+  form.url.focus();
+}
+
+function webhookFromForm() {
+  const url = $("#discord-form").url.value.trim();
+  if (!DISCORD_WEBHOOK_RE.test(url)) {
+    discordMessage("That doesn't look like a Discord webhook URL (https://discord.com/api/webhooks/…).", false);
+    return null;
+  }
+  return url;
+}
+
+$("#discord-cancel").addEventListener("click", () => $("#discord-dialog").close());
+
+$("#discord-test").addEventListener("click", async () => {
+  const url = webhookFromForm();
+  if (!url) return;
+  try {
+    await postToDiscord({ content: `👋 Test from Team Serious Face, sent by ${myDisplayName()}. New team runs will show up here.` }, url);
+    discordMessage("Test message sent. Check the channel!", true);
+  } catch (e) {
+    discordMessage(`Couldn't post: ${e.message}`, false);
+  }
+});
+
+$("#discord-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const url = webhookFromForm();
+  if (!url) return;
+  try {
+    await setDoc(doc(db, "config", "discord"), { webhookUrl: url, updatedBy: myDisplayName() });
+    $("#discord-dialog").close();
+  } catch (err) {
+    discordMessage(`Couldn't save: ${err.message}. Are the latest Firestore rules published?`, false);
+  }
+});
+
+$("#discord-remove").addEventListener("click", async () => {
+  if (!confirm("Stop posting new runs to Discord?")) return;
+  await deleteDoc(doc(db, "config", "discord"));
+  $("#discord-dialog").close();
 });

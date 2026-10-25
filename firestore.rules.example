@@ -91,6 +91,17 @@ service cloud.firestore {
       allow delete: if isMember();
     }
 
+    // Discord webhook for run announcements. Secret-ish, so it lives here (members only), not in the code.
+    match /config/{id} {
+      allow read: if isMember();
+      allow create, update: if isMember() && id == 'discord'
+        && request.resource.data.keys().hasOnly(['webhookUrl', 'updatedBy'])
+        && request.resource.data.webhookUrl is string
+        && request.resource.data.webhookUrl.matches('https://(ptb[.]|canary[.])?(discord|discordapp)[.]com/api/webhooks/[0-9]+/[A-Za-z0-9_-]+')
+        && request.resource.data.updatedBy is string && request.resource.data.updatedBy.size() <= 40;
+      allow delete: if isMember() && id == 'discord';
+    }
+
     // When the runs were last looked for, and by whom.
     match /meta/{id} {
       allow read: if isMember();
