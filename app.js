@@ -166,7 +166,6 @@ onAuthStateChanged(auth, (user) => {
   document.body.classList.remove("signed-out");
   $("#app").hidden = false;
   $("#who").hidden = false;
-  $("#user-email").textContent = user.email;
   unsubPlayers = onSnapshot(collection(db, "players"), onPlayers, onDenied);
   unsubLates = onSnapshot(collection(db, "lates"), (snap) => {
     state.lates = snap.docs
@@ -531,7 +530,7 @@ function keyEditor(p) {
     ? `<select data-field="keyDungeon"><option value="">Dungeon…</option>${state.dungeons.map((d) =>
         `<option ${d.name === p.keyDungeon ? "selected" : ""}>${esc(d.name)}</option>`).join("")}</select>`
     : `<input data-field="keyDungeon" placeholder="Dungeon" value="${esc(p.keyDungeon)}" style="width:120px">`;
-  return `<div class="key">🔑 My key: ${options}
+  return `<div class="key"><span class="nowrap">🔑 My key:</span> ${options}
     <input data-field="keyLevel" type="number" min="2" max="40" placeholder="+lvl" value="${esc(p.keyLevel)}"></div>`;
 }
 
@@ -773,28 +772,43 @@ $("#late-form").addEventListener("submit", async (e) => {
 
 $("#refresh").addEventListener("click", () => state.players.forEach(loadRio));
 
-$("#add-player").region.value = defaultRegion;
+// "Add character" opens a dialog; new users also get a button in the welcome box.
+function openAddDialog() {
+  const form = $("#add-player");
+  form.reset();
+  form.region.value = defaultRegion;
+  $("#add-error").hidden = true;
+  $("#add-dialog").showModal();
+  form.name.focus();
+}
+document.querySelectorAll("[data-open-add]").forEach((b) => b.addEventListener("click", openAddDialog));
+$("#add-cancel").addEventListener("click", () => $("#add-dialog").close());
+
 $("#add-player").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
   const p = { name: form.name.value.trim(), realm: form.realm.value.trim(), region: form.region.value };
   const err = $("#add-error");
+  const submit = $("#add-submit");
   err.hidden = true;
+  submit.disabled = true;
+  submit.textContent = "Checking…";
   try {
     const profile = await fetchRio(p); // validate the character exists before saving
     p.name = profile.name;
     p.realm = profile.realm;
+    const ref = await addDoc(collection(db, "players"), {
+      ...p, keyDungeon: "", keyLevel: null, ownerUid: state.user.uid, createdAt: serverTimestamp(),
+    });
+    if (!state.me) setMe(ref.id);
+    $("#add-dialog").close();
   } catch (ex) {
-    err.textContent = `Raider.io: ${ex.message}`;
+    err.textContent = ex.message.includes("character") ? `Raider.io: ${ex.message}` : ex.message;
     err.hidden = false;
-    return;
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "Add";
   }
-  const ref = await addDoc(collection(db, "players"), {
-    ...p, keyDungeon: "", keyLevel: null, ownerUid: state.user.uid, createdAt: serverTimestamp(),
-  });
-  form.name.value = "";
-  form.realm.value = "";
-  if (!state.me) setMe(ref.id);
 });
 
 // ---------- Warcraft Logs: team runs ----------
@@ -959,7 +973,7 @@ function renderLogs() {
 
   el.innerHTML = `
     <div class="logs-head">
-      <h3>📜 Team runs</h3>
+      <h3>📜 Logs</h3>
       ${connected
         ? `<button class="secondary" data-logs="refresh" ${logs.busy ? "disabled" : ""}>${logs.busy ? "Fetching…" : "Refresh"}</button>`
         : `<button class="secondary" data-logs="connect">Connect Warcraft Logs</button>`}
@@ -978,7 +992,7 @@ function renderLogs() {
         aria-selected="${i === day}" data-day="${i}">${name}${byDay[i].length ? `<span class="count">${byDay[i].length}</span>` : ""}</button>`).join("")}
     </div>
     ${runs.length ? "" : `<p class="muted small day-empty">No team runs on ${addDays(state.weekStart, day).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}</p>`}
-    <ul class="runs">${runs.map((r) => {
+    <ul class="run-list">${runs.map((r) => {
       const d = state.dungeons.find((x) => normName(x.name) === normName(r.dungeon));
       const res = runResult(r);
       const when = new Date(r.startedAt);
@@ -1043,6 +1057,29 @@ $("#logs").addEventListener("submit", (e) => {
   }
   refreshLogs({ code });
 });
+
+// ---------- tabs: schedule / team runs / hall of shame ----------
+
+function showView(view) {
+  if (view === "runs" && !wcl.isConfigured()) view = "schedule";
+  if (!["schedule", "runs", "shame"].includes(view)) view = "schedule";
+  try { localStorage.setItem("view", view); } catch { /* not important */ }
+  document.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== view; });
+  document.querySelectorAll("[data-view]").forEach((b) => {
+    b.classList.toggle("on", b.dataset.view === view);
+    b.setAttribute("aria-selected", b.dataset.view === view);
+  });
+  $(".week-actions").hidden = view !== "schedule"; // copy/clear only make sense for the schedule
+}
+
+$(".view-tabs").addEventListener("click", (e) => {
+  const view = e.target.closest("[data-view]")?.dataset.view;
+  if (view) showView(view);
+});
+if (!wcl.isConfigured()) $('[data-view="runs"]').hidden = true;
+let savedView = "schedule";
+try { savedView = localStorage.getItem("view") || "schedule"; } catch { /* default */ }
+showView(new URLSearchParams(location.search).has("code") ? "runs" : savedView); // back from the WCL login
 
 // Coming back from the Warcraft Logs login page.
 wcl.handleRedirect().then((done) => {

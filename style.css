@@ -38,7 +38,6 @@ h3 { margin: 0 0 8px; font-size: 14px; }
 .who { display: flex; gap: 8px; align-items: center; min-width: 0; }
 .who label { white-space: nowrap; }
 .who select { min-width: 0; max-width: 220px; }
-#user-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 button, select, input {
   font: inherit;
@@ -148,16 +147,17 @@ body.signed-out header { display: none; }
 
 .banner { margin: 16px 24px 0; padding: 12px; border: 1px solid var(--error); border-radius: 8px; color: var(--error); }
 
+/* Roster on top, schedule below, both full width. */
 main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
   padding: 24px;
+  max-width: 1800px;
+  margin: 0 auto;
 }
 @media (max-width: 1000px) {
-  main { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
-  /* One column: roster first, so new people see they need to add a character. */
-  .roster { order: -1; }
+  main { padding: 16px; gap: 16px; }
 }
 
 section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
@@ -166,6 +166,20 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .week-pick, .week-actions { display: flex; gap: 8px; align-items: center; }
 .week-pick h2 { min-width: 180px; text-align: center; }
 .hint { color: var(--muted); margin: 8px 0 12px; }
+
+/* Schedule / Logs / Hall of Shame */
+.view-tabs { display: flex; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--border); }
+.view-tabs button {
+  padding: 8px 14px; border: 0; border-radius: 6px 6px 0 0; background: none;
+  color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.view-tabs button:hover { filter: none; color: var(--text); }
+.view-tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { padding-top: 6px; }
+.tab-panel > .logs, .tab-panel > .shame { margin-top: 8px; padding-top: 0; border-top: 0; }
+/* The tab already names the section. */
+.tab-panel .logs-head h3, .tab-panel .shame > h3:first-child { display: none; }
+.tab-panel .logs-head { justify-content: flex-end; }
 
 /* Schedule grid */
 .grid {
@@ -220,18 +234,15 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
   .chip .pname { display: none; }
 }
 
-/* New user without a character: put the add form first and make it stand out. */
-.roster { display: flex; flex-direction: column; }
-.needs-char-msg { display: none; grid-column: 1 / -1; margin: 0; }
-.roster.needs-char .add-player {
-  order: -1;
-  margin: 0 0 16px;
-  padding: 14px;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
+/* New user without a character: a welcome box with a big button to the add dialog. */
+.needs-char-callout { display: none; }
+.roster.needs-char .needs-char-callout {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 14px; padding: 14px;
+  border: 1px solid var(--accent); border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 8%, var(--panel));
 }
-.roster.needs-char .needs-char-msg { display: block; }
+.needs-char-callout p { margin: 0; flex: 1 1 260px; }
 
 .best { margin-top: 16px; }
 .best ul { margin: 6px 0 0; padding-left: 18px; }
@@ -240,12 +251,14 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 
 /* Roster */
 .roster-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; order: -2; }
-.cards { display: flex; flex-direction: column; gap: 10px; }
+.roster-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+/* Cards side by side (five fit on one row on a laptop); swipeable row on phones, see below. */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 10px; }
 
 /* Group keys list */
 .keys-panel { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .keys-panel:empty { display: none; }
-.keys-panel ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.keys-panel ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 8px; }
 .keys-panel li {
   display: flex; align-items: center; gap: 8px;
   padding: 4px 8px 4px 4px; border-radius: 6px; background: var(--panel-2);
@@ -275,12 +288,14 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .card .score b { font-size: 18px; }
 .card .stats { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .card .stats span b { color: var(--text); }
-.card .runs { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
-.card .run { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--panel); border: 1px solid var(--border); }
+.card .runs { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 3px; }
+.card .run { font-size: 10px; padding: 1px 4px; border-radius: 4px; background: var(--panel); border: 1px solid var(--border); }
 .card .run.timed { border-color: var(--good); }
 .card .key { margin-top: 8px; display: flex; gap: 6px; align-items: center; font-size: 12px; }
 .card .key select, .card .key input { padding: 3px 6px; font-size: 12px; }
-.card .key input { width: 56px; }
+.card .key input { width: 56px; flex: none; }
+.card .key select { flex: 1; min-width: 0; }
+.nowrap { white-space: nowrap; }
 .card .remove { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 .card .legend { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 
@@ -338,9 +353,9 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
   background: rgb(255 255 255 / .12);
 }
 .day-tabs button.on .count { background: rgb(0 0 0 / .18); }
-.runs { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.runs li { border-radius: 6px; background: var(--panel-2); }
-.runs li.open { outline: 1px solid var(--border); }
+.run-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.run-list li { border-radius: 6px; background: var(--panel-2); }
+.run-list li.open { outline: 1px solid var(--border); }
 .run-row {
   width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
   padding: 6px 8px; background: none; border: 0; color: var(--text); font-weight: 400; text-align: left;
@@ -388,19 +403,25 @@ dialog::backdrop { background: rgb(0 0 0 / .6); }
 dialog form { display: flex; flex-direction: column; gap: 12px; }
 dialog h3 { margin: 0; }
 dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+dialog input, dialog select { width: 100%; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
-.add-player { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
-.add-player h3, .add-player .error { grid-column: 1 / -1; }
-.add-player input, .add-player select, .add-player button { width: 100%; min-width: 0; }
 .error { color: var(--error); margin: 0; }
 
 /* Phones */
 @media (max-width: 600px) {
+  /* Swipe through the roster sideways: as tall as one card however many characters there are. */
+  .cards {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px;
+    margin: 0 -12px; padding: 0 12px 8px; scroll-padding: 0 12px;
+  }
+  .cards > .card { flex: 0 0 86%; scroll-snap-align: start; }
+  .cards > p { margin: 0; }
+  .view-tabs button { flex: 1; padding: 8px 4px; font-size: 13px; white-space: nowrap; }
+  .hide-sm { display: none; }
   header { padding: 12px 16px; }
   .who { width: 100%; }
   .who select { flex: 1; max-width: none; }
-  #user-email { display: none; }
 
   main { padding: 12px; }
   section { padding: 12px; }

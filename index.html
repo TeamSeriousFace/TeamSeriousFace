@@ -12,7 +12,6 @@
     <div class="who" id="who" hidden>
       <label for="me">Playing as</label>
       <select id="me"></select>
-      <span id="user-email" class="muted"></span>
       <button id="sign-out" class="secondary">Sign out</button>
     </div>
   </header>
@@ -61,6 +60,22 @@
   </div>
 
   <main id="app" hidden>
+    <section class="roster">
+      <div class="roster-head">
+        <h2>Roster</h2>
+        <div class="roster-actions">
+          <button class="secondary" data-open-add>+ Add character</button>
+          <button id="refresh" class="secondary">Refresh Raider.io</button>
+        </div>
+      </div>
+      <div class="needs-char-callout">
+        <p>👋 Welcome! Add your WoW character first. Then you can mark your hours in the schedule.</p>
+        <button data-open-add>Add your character</button>
+      </div>
+      <div id="keys" class="keys-panel"></div>
+      <div id="cards" class="cards"></div>
+    </section>
+
     <section class="schedule">
       <div class="week-nav">
         <div class="week-pick">
@@ -73,36 +88,49 @@
           <button id="clear-week" class="secondary">Clear my week</button>
         </div>
       </div>
-      <div id="busy-row" class="busy-row"></div>
-      <p class="hint">Click or drag over the hours you can play (on a phone, tap each hour). Times are in your local time zone.</p>
-      <div id="grid" class="grid"></div>
-      <div id="best" class="best"></div>
-      <div id="logs" class="logs"></div>
-      <div id="shame" class="shame"></div>
+      <div class="view-tabs" role="tablist">
+        <button role="tab" data-view="schedule">📅 Schedule</button>
+        <button role="tab" data-view="runs">📜 Logs</button>
+        <button role="tab" data-view="shame">😬 <span class="hide-sm">Hall of </span>Shame</button>
+      </div>
+      <div class="tab-panel" data-panel="schedule">
+        <div id="busy-row" class="busy-row"></div>
+        <p class="hint">Click or drag over the hours you can play (on a phone, tap each hour). Times are in your local time zone.</p>
+        <div id="grid" class="grid"></div>
+        <div id="best" class="best"></div>
+      </div>
+      <div class="tab-panel" data-panel="runs" hidden>
+        <div id="logs" class="logs"></div>
+      </div>
+      <div class="tab-panel" data-panel="shame" hidden>
+        <div id="shame" class="shame"></div>
+      </div>
     </section>
 
-    <section class="roster">
-      <div class="roster-head">
-        <h2>Roster</h2>
-        <button id="refresh" class="secondary">Refresh Raider.io</button>
-      </div>
-      <div id="keys" class="keys-panel"></div>
-      <div id="cards" class="cards"></div>
+  </main>
 
-      <form id="add-player" class="add-player">
-        <h3>Add character</h3>
-        <p class="needs-char-msg">👋 Welcome! Add your WoW character first. Then you can mark your hours in the schedule.</p>
-        <input name="name" placeholder="Character name" required>
-        <input name="realm" placeholder="Realm (e.g. Draenor)" required>
+  <dialog id="add-dialog">
+    <form id="add-player">
+      <h3>Add character</h3>
+      <label>Character name
+        <input name="name" placeholder="e.g. Derrep" required autocomplete="off">
+      </label>
+      <label>Realm
+        <input name="realm" placeholder="e.g. Twisting Nether" required autocomplete="off">
+      </label>
+      <label>Region
         <select name="region">
           <option value="eu">EU</option><option value="us">US</option>
           <option value="kr">KR</option><option value="tw">TW</option>
         </select>
-        <button type="submit">Add</button>
-        <p id="add-error" class="error" hidden></p>
-      </form>
-    </section>
-  </main>
+      </label>
+      <p id="add-error" class="error small" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="secondary" id="add-cancel">Cancel</button>
+        <button type="submit" id="add-submit">Add</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="late-dialog">
     <form method="dialog" id="late-form">
