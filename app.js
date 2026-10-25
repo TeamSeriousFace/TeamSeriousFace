@@ -7,6 +7,7 @@ import {
   getAuth, onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider,
 } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import { firebaseConfig, defaultRegion } from "./firebase-config.js";
+import * as wcl from "./wcl.js";
 
 // Schedule shows 10:00 to 02:00. Hours 24/25 mean 00:00/01:00 after that day.
 const FIRST_HOUR = 10;
@@ -29,6 +30,11 @@ const TEAM = [
   { name: "Yogurtdip", realm: "tarren-mill", region: "eu" },
 ];
 
+// Warcraft Logs: only runs with at least this many roster characters are imported.
+const MIN_TEAM_IN_RUN = 2;
+// A connected member's browser looks for new logs when the last check is older than this.
+const LOGS_AUTO_REFRESH_MINUTES = 30;
+
 const RIO_FIELDS = [
   "mythic_plus_scores_by_season:current",
   "mythic_plus_weekly_highest_level_runs",
@@ -47,6 +53,9 @@ const state = {
   lates: [],            // [{id, playerId, minutes, note, at, reportedBy, reportedByName, excuse?}]
   rio: {},              // playerId -> raider.io profile | {error}
   dungeons: [],         // current season dungeons from raider.io
+  runs: [],             // imported Warcraft Logs runs, newest first
+  // day: selected day tab in the shown week (null = today, or the latest day with runs)
+  logs: { meta: null, metaLoaded: false, busy: false, status: "", notice: "", error: "", open: null, day: null, autoDone: false },
   me: localStorage.getItem("me") || "",
   weekStart: mondayOf(new Date()),
   unsubAvailability: null,
@@ -138,13 +147,17 @@ $("#sign-out").addEventListener("click", () => signOut(auth));
 
 let unsubPlayers = null;
 let unsubLates = null;
+let unsubRuns = null;
+let unsubLogsMeta = null;
 
 onAuthStateChanged(auth, (user) => {
   state.user = user;
   unsubPlayers?.();
   unsubLates?.();
+  unsubRuns?.();
+  unsubLogsMeta?.();
   state.unsubAvailability?.();
-  unsubPlayers = unsubLates = state.unsubAvailability = null;
+  unsubPlayers = unsubLates = unsubRuns = unsubLogsMeta = state.unsubAvailability = null;
   if (!user) {
     if ($("#signin-error").hidden) showSignin();
     return;
@@ -166,6 +179,20 @@ onAuthStateChanged(auth, (user) => {
     console.error("Could not load late reports:", err);
     $("#shame").innerHTML = `<h3>Hall of Shame</h3><p class="error">Couldn't load late reports. Are the latest Firestore rules published?</p>`;
   });
+  unsubRuns = onSnapshot(collection(db, "runs"), (snap) => {
+    state.runs = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.startedAt - a.startedAt);
+    renderLogs();
+  }, (err) => {
+    console.error("Could not load runs:", err);
+    state.logs.error = "Couldn't load team runs. Are the latest Firestore rules published?";
+    renderLogs();
+  });
+  unsubLogsMeta = onSnapshot(doc(db, "meta", "logs"), (snap) => {
+    state.logs.meta = snap.exists() ? snap.data() : null;
+    state.logs.metaLoaded = true;
+    renderLogs();
+    maybeAutoRefreshLogs();
+  }, (err) => console.error("Could not load logs status:", err));
   subscribeWeek();
   loadDungeons();
 });
@@ -180,6 +207,7 @@ function onPlayers(snap) {
   renderGrid();
   renderRoster();
   renderShame();
+  maybeAutoRefreshLogs();
 }
 
 function subscribeWeek() {
@@ -202,6 +230,9 @@ function subscribeWeek() {
     renderRoster();
   }, (err) => console.error("Could not load schedule:", err));
   renderWeekLabel();
+  state.logs.day = null; // team runs follow the shown week
+  state.logs.open = null;
+  renderLogs();
 }
 
 function saveMyWeek() {
@@ -245,9 +276,10 @@ async function loadDungeons() {
       .filter((s) => s.is_main_season && new Date(s.starts?.eu ?? 0).getTime() <= now)
       .sort((a, b) => new Date(b.starts.eu) - new Date(a.starts.eu))[0];
     state.dungeons = (current?.dungeons ?? [])
-      .map((d) => ({ name: d.name, short: d.short_name, icon: d.icon_url }))
+      .map((d) => ({ name: d.name, short: d.short_name, icon: d.icon_url, timer: d.keystone_timer_seconds }))
       .sort((a, b) => a.name.localeCompare(b.name));
     renderRoster();
+    renderLogs();
   } catch {
     // Key dropdown falls back to free text if this fails.
   }
@@ -763,4 +795,264 @@ $("#add-player").addEventListener("submit", async (e) => {
   form.name.value = "";
   form.realm.value = "";
   if (!state.me) setMe(ref.id);
+});
+
+// ---------- Warcraft Logs: team runs ----------
+
+const runId = ({ report, fight }) => `${report.code}_${fight.id}`;
+const wclClassName = (subType) => String(subType ?? "").replace(/([a-z])([A-Z])/g, "$1 $2"); // "DeathKnight" -> "Death Knight"
+const normName = (s) => String(s ?? "").toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+const kFormat = (n) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(n ?? 0));
+const myDisplayName = () => myPlayers()[0]?.name ?? state.user?.displayName?.split(" ")[0] ?? "someone";
+
+function timeAgo(date) {
+  const min = Math.round((Date.now() - date.getTime()) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  return h < 24 ? `${h} h ago` : date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+// Timed / over time, using the dungeon timer from Raider.io when we have it.
+function runResult(r) {
+  const timer = state.dungeons.find((d) => normName(d.name) === normName(r.dungeon))?.timer;
+  const diff = timer ? timer * 1000 - r.timeMs : null;
+  if (r.bonus > 0) {
+    return { ok: true, text: `✅ Timed${"▲".repeat(r.bonus)}${diff != null ? ` · ${fmtTime(diff)} left` : ""}` };
+  }
+  if (diff != null && diff < 0) return { ok: false, text: `❌ ${fmtTime(-diff)} over` };
+  return { ok: false, text: r.kill ? "❌ Not timed" : "❌ Not finished" };
+}
+
+function runDoc({ report, fight, players }, details) {
+  const deathsBy = new Map();
+  for (const d of details.deaths) deathsBy.set(d.actorId, (deathsBy.get(d.actorId) ?? 0) + 1);
+  return {
+    code: report.code,
+    fightId: fight.id,
+    dungeon: fight.name,
+    level: fight.keystoneLevel,
+    timeMs: Math.round(fight.keystoneTime ?? fight.endTime - fight.startTime),
+    bonus: fight.keystoneBonus ?? 0,
+    kill: !!fight.kill,
+    startedAt: Math.round(report.startTime + fight.startTime),
+    avgIlvl: fight.averageItemLevel ? Math.round(fight.averageItemLevel * 10) / 10 : null,
+    team: players.filter((p) => p.team).map((p) => p.name),
+    players: players.slice(0, 10).map((p) => ({
+      name: p.name,
+      className: wclClassName(p.className),
+      spec: p.spec ?? "",
+      team: p.team,
+      dps: details.dps.get(p.actorId) ?? 0,
+      hps: details.hps.get(p.actorId) ?? 0,
+      deaths: deathsBy.get(p.actorId) ?? 0,
+    })),
+    deaths: details.deaths.slice(0, 40).map((d) => ({
+      name: d.name,
+      ability: d.ability,
+      atMs: Math.max(0, Math.round(d.timestamp - fight.startTime)),
+    })),
+    importedBy: state.user.uid,
+    importedAt: serverTimestamp(),
+  };
+}
+
+// Finds runs with at least MIN_TEAM_IN_RUN roster characters and saves new ones for everyone.
+// With `code`, only that report is checked (for pasted links, e.g. unlisted logs).
+async function refreshLogs({ code } = {}) {
+  const logs = state.logs;
+  if (logs.busy) return;
+  Object.assign(logs, { busy: true, error: "", notice: "", status: code ? "Reading the log…" : "Looking for new team runs…" });
+  renderLogs();
+  try {
+    const chars = state.players.map((p) => ({ name: p.name, realm: p.realm, realmSlug: slug(p.realm), region: p.region }));
+    if (chars.length < MIN_TEAM_IN_RUN) throw new Error(`Add at least ${MIN_TEAM_IN_RUN} characters to the roster first.`);
+    const codes = code ? [code] : await wcl.recentTeamReportCodes(chars, MIN_TEAM_IN_RUN);
+    const reports = await wcl.fetchReports(codes);
+    if (code && !reports.length) throw new Error("Couldn't open that log. If it's private, the uploader needs to make it unlisted or public.");
+    const found = reports.flatMap((r) => wcl.teamRuns(r, chars, MIN_TEAM_IN_RUN));
+    const known = new Set(state.runs.map((r) => r.id));
+    const fresh = found.filter((r) => !known.has(runId(r))).slice(0, 20);
+    for (const [i, run] of fresh.entries()) {
+      logs.status = `Importing run ${i + 1} of ${fresh.length}…`;
+      renderLogs();
+      const details = await wcl.runDetails(run.report.code, run.fight.id);
+      await setDoc(doc(db, "runs", runId(run)), runDoc(run, details));
+    }
+    if (!code) await setDoc(doc(db, "meta", "logs"), { lastRefresh: serverTimestamp(), byName: myDisplayName() });
+    logs.notice = code && !found.length
+      ? `No Mythic+ runs with ${MIN_TEAM_IN_RUN}+ of the team in that log.`
+      : fresh.length ? `Added ${fresh.length} new run${fresh.length === 1 ? "" : "s"}.` : "No new runs.";
+  } catch (e) {
+    console.error(e);
+    logs.error = e.message;
+  } finally {
+    logs.busy = false;
+    logs.status = "";
+    renderLogs();
+  }
+}
+
+// One connected member's browser keeps the shared list fresh; everyone else just reads it.
+function maybeAutoRefreshLogs() {
+  const logs = state.logs;
+  if (logs.autoDone || !wcl.isConfigured() || !wcl.isConnected()) return;
+  if (!logs.metaLoaded || state.players.length < MIN_TEAM_IN_RUN) return;
+  logs.autoDone = true;
+  const last = logs.meta?.lastRefresh?.toDate?.();
+  if (logs.justConnected || !last || Date.now() - last.getTime() > LOGS_AUTO_REFRESH_MINUTES * 60000) refreshLogs();
+  logs.justConnected = false;
+}
+
+// Team members in a run, matched against the current roster so characters added later count too.
+function inRoster(name) {
+  return state.players.some((p) => normName(p.name) === normName(name));
+}
+function runTeam(r) {
+  const players = r.players ?? [];
+  const now = players.filter((p) => p.team || inRoster(p.name));
+  return now.length ? now : (r.team ?? []).map((name) => ({ name }));
+}
+
+function runDetailsHtml(r) {
+  const players = [...(r.players ?? [])]
+    .map((p) => ({ ...p, team: p.team || inRoster(p.name) }))
+    .sort((a, b) => b.team - a.team || b.dps - a.dps);
+  return `<div class="run-details">
+    <table>
+      <tr><th>Player</th><th>Spec</th><th>DPS</th><th>HPS</th><th>Deaths</th></tr>
+      ${players.map((p) => `<tr class="${p.team ? "is-team" : ""}">
+        <td style="color:${CLASS_COLORS[p.className] ?? "var(--text)"}">${esc(p.name)}</td>
+        <td class="muted">${esc(p.spec)}</td>
+        <td class="num">${kFormat(p.dps)}</td>
+        <td class="num">${kFormat(p.hps)}</td>
+        <td class="num ${p.deaths ? "dead" : ""}">${p.deaths}</td>
+      </tr>`).join("")}
+    </table>
+    ${r.deaths?.length ? `<ul class="death-list">${r.deaths.map((d) => `<li>💀 <b>${esc(d.name)}</b>
+      <span class="muted">${esc(d.ability)} · ${fmtTime(d.atMs)}</span></li>`).join("")}</ul>` : `<p class="muted small">No deaths. 🎉</p>`}
+    <a class="muted small" href="https://www.warcraftlogs.com/reports/${encodeURIComponent(r.code)}#fight=${r.fightId}"
+       target="_blank" rel="noopener">Open the full log on Warcraft Logs ↗</a>
+  </div>`;
+}
+
+function renderLogs() {
+  const el = $("#logs");
+  if (!el) return;
+  if (!wcl.isConfigured()) { el.innerHTML = ""; return; }
+  const logs = state.logs;
+  const connected = wcl.isConnected();
+  const last = logs.meta?.lastRefresh?.toDate?.();
+  const statusText = logs.status
+    || (last ? `Updated ${timeAgo(last)} by ${esc(logs.meta.byName)}` : "No logs fetched yet");
+  // Day tabs for the week shown in the schedule.
+  const byDay = Array.from({ length: 7 }, () => []);
+  for (const r of state.runs) {
+    const i = runDayIndex(r);
+    if (i >= 0 && i < 7) byDay[i].push(r);
+  }
+  byDay.forEach((list) => list.sort((a, b) => a.startedAt - b.startedAt));
+  const todayIdx = weekKey(mondayOf(new Date())) === weekKey(state.weekStart) ? (new Date().getDay() + 6) % 7 : -1;
+  const lastWithRuns = byDay.findLastIndex((list) => list.length);
+  const day = logs.day ?? (todayIdx >= 0 ? todayIdx : Math.max(lastWithRuns, 0));
+  const runs = byDay[day];
+
+  el.innerHTML = `
+    <div class="logs-head">
+      <h3>📜 Team runs</h3>
+      ${connected
+        ? `<button class="secondary" data-logs="refresh" ${logs.busy ? "disabled" : ""}>${logs.busy ? "Fetching…" : "Refresh"}</button>`
+        : `<button class="secondary" data-logs="connect">Connect Warcraft Logs</button>`}
+    </div>
+    <p class="muted small">${statusText}${connected ? ` · <a href="#" data-logs="disconnect">disconnect</a>` : ""}</p>
+    ${logs.error ? `<p class="error small">${esc(logs.error)}</p>` : ""}
+    ${logs.notice ? `<p class="small notice">${esc(logs.notice)}</p>` : ""}
+    ${!connected && !state.runs.length ? `<p class="muted small">Runs where at least ${MIN_TEAM_IN_RUN} of the team played show up here.
+      Someone with a Warcraft Logs account connects once, then everyone can see them.</p>` : ""}
+    ${connected ? `<form class="log-paste" id="log-paste">
+      <input name="link" placeholder="Paste a Warcraft Logs link (optional)" autocomplete="off">
+      <button class="secondary" ${logs.busy ? "disabled" : ""}>Add</button>
+    </form>` : ""}
+    <div class="day-tabs" role="tablist">${DAYS.map((name, i) => `
+      <button role="tab" class="${i === day ? "on" : ""} ${i === todayIdx ? "today" : ""} ${byDay[i].length ? "" : "empty"}"
+        aria-selected="${i === day}" data-day="${i}">${name}${byDay[i].length ? `<span class="count">${byDay[i].length}</span>` : ""}</button>`).join("")}
+    </div>
+    ${runs.length ? "" : `<p class="muted small day-empty">No team runs on ${addDays(state.weekStart, day).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "short" })}</p>`}
+    <ul class="runs">${runs.map((r) => {
+      const d = state.dungeons.find((x) => normName(x.name) === normName(r.dungeon));
+      const res = runResult(r);
+      const when = new Date(r.startedAt);
+      const open = logs.open === r.id;
+      return `<li class="${open ? "open" : ""}">
+        <button class="run-row" data-run="${esc(r.id)}" aria-expanded="${open}">
+          <span class="muted when">${when.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+          ${d?.icon ? `<img class="dicon" src="${esc(d.icon)}" alt="">` : ""}
+          <b class="lvl">+${r.level}</b>
+          <span class="dname">${esc(r.dungeon)}</span>
+          <span class="result ${res.ok ? "ok" : "bad"}">${res.text}</span>
+          <span class="who">${runTeam(r).map((p) =>
+            `<span style="color:${CLASS_COLORS[p.className] ?? "var(--text)"}">${esc(p.name)}</span>`).join(" · ")}</span>
+        </button>
+        ${open ? runDetailsHtml(r) : ""}
+      </li>`;
+    }).join("")}</ul>`;
+}
+
+// Which day of the shown week a run belongs to. Runs before 06:00 count toward the evening
+// before, like the schedule's 00:00–01:00 rows. Returns -1/7+ for runs outside the week.
+const DAY_STARTS_AT_HOUR = 6;
+function runDayIndex(r) {
+  const t = new Date(r.startedAt - DAY_STARTS_AT_HOUR * 3600e3);
+  const day = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  return Math.round((day - state.weekStart) / 86400e3); // round: DST days are 23/25 h long
+}
+
+$("#logs").addEventListener("click", (e) => {
+  const action = e.target.closest("[data-logs]")?.dataset.logs;
+  if (action) {
+    e.preventDefault();
+    if (action === "connect") wcl.connect();
+    if (action === "refresh") refreshLogs();
+    if (action === "disconnect" && confirm("Disconnect Warcraft Logs in this browser? The saved runs stay.")) {
+      wcl.disconnect();
+      renderLogs();
+    }
+    return;
+  }
+  const tab = e.target.closest("[data-day]");
+  if (tab) {
+    state.logs.day = Number(tab.dataset.day);
+    state.logs.open = null;
+    renderLogs();
+    return;
+  }
+  const row = e.target.closest("[data-run]");
+  if (row) {
+    state.logs.open = state.logs.open === row.dataset.run ? null : row.dataset.run;
+    renderLogs();
+  }
+});
+
+$("#logs").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const code = wcl.reportCodeFrom(e.target.link.value);
+  if (!code) {
+    state.logs.error = "That doesn't look like a Warcraft Logs report link.";
+    renderLogs();
+    return;
+  }
+  refreshLogs({ code });
+});
+
+// Coming back from the Warcraft Logs login page.
+wcl.handleRedirect().then((done) => {
+  if (!done) return;
+  state.logs.notice = "Warcraft Logs connected.";
+  state.logs.autoDone = false;
+  state.logs.justConnected = true; // fetch right away, however recent the last check was
+  renderLogs();
+  maybeAutoRefreshLogs();
+}).catch((e) => {
+  state.logs.error = `Warcraft Logs: ${e.message}`;
+  renderLogs();
 });

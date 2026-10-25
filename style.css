@@ -312,6 +312,60 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .card .late-line b { color: var(--error); }
 .card .late-btn { margin-left: auto; padding: 2px 8px; font-size: 12px; }
 
+/* Warcraft Logs team runs */
+.logs { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.logs:empty { display: none; }
+.logs-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.logs-head h3 { margin: 0; }
+.logs-head button { padding: 3px 10px; font-size: 12px; }
+.logs > p { margin: 6px 0 0; }
+.logs .notice { color: var(--good); }
+.log-paste { display: flex; gap: 6px; margin-top: 10px; }
+.log-paste input { flex: 1; min-width: 0; font-size: 12px; }
+.log-paste button { font-size: 12px; padding: 4px 12px; }
+.day-tabs { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+.day-tabs button {
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 5px 0; font-size: 12px; font-weight: 600;
+  background: var(--panel-2); color: var(--text); border-color: var(--border);
+}
+.day-tabs button.empty { color: var(--muted); font-weight: 400; }
+.day-tabs button.today { border-color: rgb(245 185 66 / .5); }
+.day-tabs button.on { background: var(--accent); border-color: var(--accent); color: #111; }
+.logs .day-empty { margin: 10px 0 0; }
+.day-tabs .count {
+  min-width: 16px; padding: 0 4px; border-radius: 8px; font-size: 10px; line-height: 16px;
+  background: rgb(255 255 255 / .12);
+}
+.day-tabs button.on .count { background: rgb(0 0 0 / .18); }
+.runs { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.runs li { border-radius: 6px; background: var(--panel-2); }
+.runs li.open { outline: 1px solid var(--border); }
+.run-row {
+  width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  padding: 6px 8px; background: none; border: 0; color: var(--text); font-weight: 400; text-align: left;
+}
+.run-row:hover { filter: none; background: rgb(255 255 255 / .03); }
+.run-row .when { font-size: 12px; min-width: 76px; }
+.run-row .dicon { width: 22px; height: 22px; border-radius: 4px; }
+.run-row .lvl { color: var(--accent); }
+.run-row .dname { font-weight: 600; }
+.run-row .result { font-size: 12px; }
+.run-row .result.ok { color: var(--good); }
+.run-row .result.bad { color: var(--error); }
+.run-row .who { margin-left: auto; font-size: 12px; font-weight: 600; }
+.run-details { padding: 4px 10px 10px; font-size: 12px; }
+.run-details table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+.run-details th { text-align: left; color: var(--muted); font-weight: 400; padding: 3px 6px 3px 0; }
+.run-details th:nth-child(n+3) { text-align: right; }
+.run-details td { padding: 3px 6px 3px 0; border-top: 1px solid var(--border); }
+.run-details tr.is-team td:first-child { font-weight: 700; }
+.logs a { color: var(--muted); }
+.logs a:hover { color: var(--text); }
+.run-details .num { text-align: right; font-variant-numeric: tabular-nums; }
+.run-details .dead { color: var(--error); font-weight: 700; }
+.death-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 2px; }
+
 /* Hall of shame */
 .shame { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 .shame table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }

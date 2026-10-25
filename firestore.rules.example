@@ -74,5 +74,29 @@ service cloud.firestore {
         && request.resource.data.excuse is string && request.resource.data.excuse.size() <= 140;
       allow delete: if isMember() && resource.data.reportedBy == request.auth.uid;
     }
+
+    // Mythic+ runs imported from Warcraft Logs by a connected member's browser. Everyone in the
+    // group can read them; imports are re-done as a whole, so members may also overwrite them.
+    match /runs/{id} {
+      allow read: if isMember();
+      allow create, update: if isMember()
+        && request.resource.data.keys().hasOnly(['code', 'fightId', 'dungeon', 'level', 'timeMs', 'bonus', 'kill',
+             'startedAt', 'avgIlvl', 'team', 'players', 'deaths', 'importedBy', 'importedAt'])
+        && request.resource.data.code is string && request.resource.data.code.size() <= 32
+        && request.resource.data.dungeon is string && request.resource.data.dungeon.size() <= 80
+        && request.resource.data.team is list && request.resource.data.team.size() <= 10
+        && request.resource.data.players is list && request.resource.data.players.size() <= 10
+        && request.resource.data.deaths is list && request.resource.data.deaths.size() <= 40
+        && request.resource.data.importedBy == request.auth.uid;
+      allow delete: if isMember();
+    }
+
+    // When the runs were last looked for, and by whom.
+    match /meta/{id} {
+      allow read: if isMember();
+      allow write: if isMember() && id == 'logs'
+        && request.resource.data.keys().hasOnly(['lastRefresh', 'byName'])
+        && request.resource.data.byName is string && request.resource.data.byName.size() <= 40;
+    }
   }
 }
