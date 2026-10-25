@@ -20,6 +20,26 @@ body {
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* App backdrop (signed in): the team picture, blurred and darkened, fixed behind the panels,
+   plus a faint Alliance-blue glow from the left and Horde-red glow from the right.
+   Fixed pseudo-elements instead of background-attachment: fixed, which phones ignore. */
+body::before, body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+}
+body::before {
+  background: url(images/hero.webp) center 35% / cover no-repeat;
+  filter: blur(14px) brightness(.28) saturate(1.15);
+  transform: scale(1.08); /* hide the blurred, see-through edges */
+}
+body::after {
+  background:
+    radial-gradient(55% 60% at 0% 35%, rgb(70 120 255 / .13), transparent 70%),
+    radial-gradient(55% 60% at 100% 65%, rgb(255 90 40 / .11), transparent 70%),
+    radial-gradient(120% 90% at 50% 0%, transparent 40%, rgb(0 0 0 / .45));
+}
+/* The login page has its own picture. */
+body.signed-out::before, body.signed-out::after { display: none; }
+
 header {
   display: flex;
   flex-wrap: wrap;
@@ -28,7 +48,9 @@ header {
   justify-content: space-between;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  background: rgb(24 27 34 / .78); /* frosted: the app backdrop shows through */
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  position: relative; z-index: 1;
 }
 
 h1 { margin: 0; font-size: 20px; color: var(--accent); }
@@ -160,7 +182,24 @@ main {
   main { padding: 16px; gap: 16px; }
 }
 
-section { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+section {
+  /* frosted glass: the app backdrop shows faintly through the panels */
+  background: rgb(24 27 34 / .72); border: 1px solid rgb(255 255 255 / .07);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-radius: 10px; padding: 16px; min-width: 0;
+}
+
+/* Roster: a moody landscape across the top of the section, faded into the panel colour.
+   It keeps the image's 1721x555 shape at any width, so the fade always ends where the image does. */
+.roster { position: relative; isolation: isolate; overflow: hidden; }
+.roster::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; z-index: -1;
+  aspect-ratio: 1721 / 555;
+  background: url(images/roster-bg.jpg) center top / cover no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 45%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 45%, transparent 100%);
+  pointer-events: none;
+}
 
 .week-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .week-pick, .week-actions { display: flex; gap: 8px; align-items: center; }
@@ -261,7 +300,10 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
 .keys-panel ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 8px; }
 .keys-panel li {
   display: flex; align-items: center; gap: 8px;
-  padding: 4px 8px 4px 4px; border-radius: 6px; background: var(--panel-2);
+  padding: 4px 8px 4px 4px; border-radius: 6px;
+  /* translucent so the roster landscape shows through */
+  background: rgb(10 12 16 / .22); border: 1px solid rgb(255 255 255 / .04);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
 }
 .keys-panel li.stale { opacity: .5; }
 .keys-panel .dicon { width: 24px; height: 24px; border-radius: 4px; flex: none; background: var(--panel); }
