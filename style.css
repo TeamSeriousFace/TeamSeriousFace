@@ -280,6 +280,27 @@ section { background: var(--panel); border: 1px solid var(--border); border-radi
   background: var(--panel-2);
 }
 .card.me { box-shadow: 0 0 0 1px var(--accent); }
+/* Faction banner as a strip across the top of the card, faded out into the card below it.
+   The banner is stretched to the card's width and mirrored, which puts its crest in the right half. */
+.card.faction-alliance, .card.faction-horde { position: relative; overflow: hidden; }
+.card.faction-alliance > *, .card.faction-horde > * { position: relative; } /* above the banner */
+.card.faction-alliance::before, .card.faction-horde::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 105px;
+  background: 35% top / cover no-repeat;
+  /* long, eased fade so there's no visible edge where the banner ends */
+  -webkit-mask-image: linear-gradient(180deg, #000 0, #000 25%, rgb(0 0 0 / .75) 45%, rgb(0 0 0 / .45) 62%, rgb(0 0 0 / .2) 80%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0, #000 25%, rgb(0 0 0 / .75) 45%, rgb(0 0 0 / .45) 62%, rgb(0 0 0 / .2) 80%, transparent 100%);
+  transform: scaleX(-1); /* mirrored: crest on the right half, between the name and the score */
+  pointer-events: none;
+}
+.card.faction-alliance::before { background-image: url(images/alliance.jpg); }
+.card.faction-horde::before { background-image: url(images/horde.jpg); }
+/* Portrait framed in the class colour so it stands out against the banner. */
+.card.faction-alliance .card-top img, .card.faction-horde .card-top img {
+  border: 2px solid var(--class-color, var(--border)); box-shadow: 0 2px 8px rgb(0 0 0 / .6);
+}
+/* Name, spec and score sit on the banner. */
+.card.faction-alliance .card-top, .card.faction-horde .card-top { text-shadow: 0 1px 3px #000, 0 0 8px rgb(0 0 0 / .8); }
 .card-top { display: flex; gap: 10px; align-items: center; }
 .card img { width: 44px; height: 44px; border-radius: 6px; }
 .card .name { font-weight: 700; color: var(--class-color, var(--text)); text-decoration: none; }

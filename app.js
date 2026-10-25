@@ -601,7 +601,7 @@ function renderRoster() {
           <img src="${esc(r.thumbnail_url)}" alt="">
           <div>
             <a class="name" href="${esc(r.profile_url)}" target="_blank" rel="noopener">${esc(r.name)}</a>
-            <div class="sub">${legend}${esc(r.active_spec_name)} ${esc(r.class)} · ${esc(r.realm)}</div>
+            <div class="sub" title="${esc(r.realm)}">${legend}${esc(r.active_spec_name)} ${esc(r.class)}</div>
           </div>
           <div class="score"><b style="color:${season.color}">${Math.round(season.score)}</b><div class="sub">M+ score</div></div>
         </div>
@@ -611,7 +611,7 @@ function renderRoster() {
         </div>
         ${best.length ? `<div class="runs">${best.slice(0, 8).map(runChip).join("")}</div>` : ""}`;
     }
-    return `<div class="card ${p.id === state.me ? "me" : ""}" style="--class-color:${color}" data-id="${p.id}">
+    return `<div class="card ${p.id === state.me ? "me" : ""} ${r.faction === "horde" || r.faction === "alliance" ? `faction-${r.faction}` : ""}" style="--class-color:${color}" data-id="${p.id}">
       ${body}
       ${weekLine(p)}
       ${keyEditor(p)}
