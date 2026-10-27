@@ -931,6 +931,38 @@ async function announceRun(r) {
   });
 }
 
+// ---------- the same key logged by several of us ----------
+
+// Uploads of one key from different loggers start within seconds of each other.
+const SAME_KEY_WITHIN_MINUTES = 15;
+
+// What identifies a key, for a run straight from a report (before it's saved).
+function runKey({ report, fight, players }) {
+  return {
+    dungeon: fight.name,
+    level: fight.keystoneLevel,
+    startedAt: Math.round(report.startTime + fight.startTime),
+    team: players.filter((p) => p.team).map((p) => p.name),
+  };
+}
+
+// Same dungeon and level, started at about the same time, with MIN_TEAM_IN_RUN of the same team in it.
+function sameKey(a, b) {
+  if (normName(a.dungeon) !== normName(b.dungeon) || a.level !== b.level) return false;
+  if (Math.abs(a.startedAt - b.startedAt) > SAME_KEY_WITHIN_MINUTES * 60000) return false;
+  const team = new Set((a.team ?? []).map(normName));
+  return (b.team ?? []).filter((n) => team.has(normName(n))).length >= MIN_TEAM_IN_RUN;
+}
+
+// Hides duplicates saved before this check existed: keeps the first run of each key.
+function uniqueRuns(runs) {
+  const kept = [];
+  for (const r of [...runs].sort((a, b) => a.startedAt - b.startedAt)) {
+    if (!kept.some((k) => sameKey(k, r))) kept.push(r);
+  }
+  return kept;
+}
+
 // Finds runs with at least MIN_TEAM_IN_RUN roster characters and saves new ones for everyone.
 // With `code`, only that report is checked (for pasted links, e.g. unlisted logs).
 async function refreshLogs({ code } = {}) {
@@ -956,12 +988,21 @@ async function refreshLogs({ code } = {}) {
         || Math.round(f.keystoneTime ?? f.endTime - f.startTime) !== saved.timeMs;
     };
     const fresh = found.filter(changed).slice(0, 20);
+    const savedNow = [];
+    let imported = 0;
     for (const [i, run] of fresh.entries()) {
+      // When several of us log the same key, each upload is its own report. Keep the first one.
+      if (!known.has(runId(run))) {
+        const key = runKey(run);
+        if ([...state.runs, ...savedNow].some((r) => r.id !== runId(run) && sameKey(r, key))) continue;
+      }
       logs.status = `Importing run ${i + 1} of ${fresh.length}…`;
       renderLogs();
       const details = await wcl.runDetails(run.report.code, run.fight.id);
       const data = runDoc(run, details);
       await setDoc(doc(db, "runs", runId(run)), data);
+      savedNow.push({ id: runId(run), ...data });
+      imported += 1;
       try {
         await announceRun(data);
       } catch (e) {
@@ -972,7 +1013,7 @@ async function refreshLogs({ code } = {}) {
     if (!code) await setDoc(doc(db, "meta", "logs"), { lastRefresh: serverTimestamp(), byName: myDisplayName() });
     logs.notice = code && !found.length
       ? `No Mythic+ runs with ${MIN_TEAM_IN_RUN}+ of the team in that log.`
-      : fresh.length ? `Added or updated ${fresh.length} run${fresh.length === 1 ? "" : "s"}.` : "No new runs.";
+      : imported ? `Added or updated ${imported} run${imported === 1 ? "" : "s"}.` : "No new runs.";
   } catch (e) {
     console.error(e);
     logs.error = e.message;
@@ -1044,7 +1085,7 @@ function renderLogs() {
     || (last ? `Updated ${timeAgo(last)} by ${esc(logs.meta.byName)}` : "No logs fetched yet");
   // Day tabs for the week shown in the schedule.
   const byDay = Array.from({ length: 7 }, () => []);
-  for (const r of state.runs) {
+  for (const r of uniqueRuns(state.runs)) {
     const i = runDayIndex(r);
     if (i >= 0 && i < 7) byDay[i].push(r);
   }
