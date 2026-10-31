@@ -529,7 +529,7 @@ function runChip(r) {
 }
 
 function keyEditor(p) {
-  if (p.id !== state.me) {
+  if (!isMine(p)) { // you can set the key on all your own characters, alts included
     return p.keyLevel
       ? `<div class="key ${isStaleKey(p) ? "muted" : ""}">🔑 <b>${esc(p.keyDungeon || "?")} +${esc(p.keyLevel)}</b>${isStaleKey(p) ? " <i>(last week?)</i>" : ""}</div>`
       : `<div class="key muted">🔑 No key set</div>`;
@@ -631,9 +631,10 @@ function renderRoster() {
 
 $("#cards").addEventListener("change", (e) => {
   const field = e.target.dataset.field;
-  if (!field || !state.me) return;
+  const player = state.players.find((p) => p.id === e.target.closest("[data-id]")?.dataset.id);
+  if (!field || !isMine(player)) return;
   const value = field === "keyLevel" ? (e.target.value ? Number(e.target.value) : null) : e.target.value;
-  updateDoc(doc(db, "players", state.me), { [field]: value, keyUpdatedAt: serverTimestamp() });
+  updateDoc(doc(db, "players", player.id), { [field]: value, keyUpdatedAt: serverTimestamp() });
 });
 
 $("#cards").addEventListener("click", async (e) => {
@@ -954,11 +955,28 @@ function sameKey(a, b) {
   return (b.team ?? []).filter((n) => team.has(normName(n))).length >= MIN_TEAM_IN_RUN;
 }
 
-// Hides duplicates saved before this check existed: keeps the first run of each key.
+// How complete a version of a key is: timed > finished over time > unfinished, then the longer one.
+// Live logging can leave a cut-off "fight" for a key next to the finished one in the same report.
+function completeness(r) {
+  return { result: r.bonus > 0 ? 3 : r.kill ? 2 : 1, timeMs: r.timeMs ?? 0 };
+}
+function isMoreComplete(a, b) {
+  const x = completeness(a);
+  const y = completeness(b);
+  return x.result !== y.result ? x.result > y.result : x.timeMs > y.timeMs + 5000;
+}
+// The fields completeness() needs, for a run straight from a report.
+const fightSummary = (f) => ({
+  bonus: f.keystoneBonus ?? 0, kill: !!f.kill, timeMs: Math.round(f.keystoneTime ?? f.endTime - f.startTime),
+});
+
+// One run per key in the list: the most complete version.
 function uniqueRuns(runs) {
   const kept = [];
   for (const r of [...runs].sort((a, b) => a.startedAt - b.startedAt)) {
-    if (!kept.some((k) => sameKey(k, r))) kept.push(r);
+    const i = kept.findIndex((k) => sameKey(k, r));
+    if (i < 0) kept.push(r);
+    else if (isMoreComplete(r, kept[i])) kept[i] = r;
   }
   return kept;
 }
@@ -991,16 +1009,27 @@ async function refreshLogs({ code } = {}) {
     const savedNow = [];
     let imported = 0;
     for (const [i, run] of fresh.entries()) {
-      // When several of us log the same key, each upload is its own report. Keep the first one.
+      // The same key can show up more than once: in each logger's report, or as a cut-off fight
+      // next to the finished one when live logging. Keep only the most complete version.
+      let replaces = null;
       if (!known.has(runId(run))) {
         const key = runKey(run);
-        if ([...state.runs, ...savedNow].some((r) => r.id !== runId(run) && sameKey(r, key))) continue;
+        const saved = [...state.runs, ...savedNow].find((r) => r.id !== runId(run) && sameKey(r, key));
+        if (saved) {
+          if (!isMoreComplete(fightSummary(run.fight), saved)) continue;
+          replaces = saved.id;
+        }
       }
       logs.status = `Importing run ${i + 1} of ${fresh.length}…`;
       renderLogs();
       const details = await wcl.runDetails(run.report.code, run.fight.id);
       const data = runDoc(run, details);
       await setDoc(doc(db, "runs", runId(run)), data);
+      if (replaces) {
+        await deleteDoc(doc(db, "runs", replaces));
+        const j = savedNow.findIndex((r) => r.id === replaces);
+        if (j >= 0) savedNow.splice(j, 1);
+      }
       savedNow.push({ id: runId(run), ...data });
       imported += 1;
       try {
